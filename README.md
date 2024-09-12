@@ -1,4 +1,4 @@
-# Vertical Profiling Float (VPF) Software Repository
+# Vertical Profiling Float Software Repository
 
 Welcome to the repository for the Vertical Profiling Float software. This README will provide an overview of the software's file structure, and functionality.
 

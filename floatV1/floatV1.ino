@@ -11,16 +11,6 @@
 #define dirDown HIGH
 #define ENABLE_PIN 8
 
-<<<<<<< HEAD
-void setup() {
-  // put your setup code here, to run once:
-  pinMode(stepPin, OUTPUT);
-  pinMode(dirPin, OUTPUT);
-  pinMode(potPin, INPUT);
-  pinMode(enablePin, OUTPUT);
-  digitalWrite(enablePin, LOW);
-}
-=======
 #define FLUID_DENSITY 997
 #define SET_POINT 1.5f
 #define HYSTERESIS 0.2f
@@ -30,7 +20,6 @@ volatile float depth = 0;
 MS5837 sensor;
 unsigned long time;
 bool timerStarted = false;
->>>>>>> 8201ac7cb5f94307e76a570b61fa327d6f4d28a8
 
 int readPot(){
   int potVal = analogRead(potPin);
@@ -120,10 +109,6 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-<<<<<<< HEAD
-  digitalWrite(dirPin, dirDown);
-  while(readPot()<= potUpperLimit){
-=======
   // goUp();
   // digitalWrite(dirPin, dirUP);
   // while(readPot()<= potUpperLimit){
@@ -180,7 +165,6 @@ void loop() {
       digitalWrite(ENABLE_PIN, LOW);
       digitalWrite(dirPin, dirUP);
       while(depth >= 0.2 && readPot() <= potUpperLimit) {
->>>>>>> 8201ac7cb5f94307e76a570b61fa327d6f4d28a8
         digitalWrite(stepPin, HIGH);
         delayMicroseconds(1000);
         digitalWrite(stepPin, LOW);
@@ -196,16 +180,4 @@ void loop() {
       digitalWrite(ENABLE_PIN, HIGH);
     }
   }
-<<<<<<< HEAD
-  delay(1000);
-  digitalWrite(dirPin, dirUP);
-  while(readPot() >= potLowerLimit){
-        digitalWrite(stepPin, HIGH);
-        delayMicroseconds(1000);
-        digitalWrite(stepPin, LOW);
-        delayMicroseconds(1000);
-  }
-  delay(1000);
-=======
->>>>>>> 8201ac7cb5f94307e76a570b61fa327d6f4d28a8
 }

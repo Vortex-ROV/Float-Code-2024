@@ -15,8 +15,6 @@
 #define SET_POINT 1.5f
 #define HYSTERESIS 0.2f
 
-volatile float depth = 0;
-
 MS5837 sensor;
 unsigned long time;
 bool timerStarted = false;
@@ -97,13 +95,13 @@ void setup() {
   digitalWrite(ENABLE_PIN, LOW);
   
   // go up
-  digitalWrite(dirPin, dirUP);
-  while(readPot()<= potUpperLimit) {
-    digitalWrite(stepPin, HIGH);
-    delayMicroseconds(1000);
-    digitalWrite(stepPin, LOW);
-    delayMicroseconds(1000);
-  }
+  // digitalWrite(dirPin, dirUP);
+  // while(readPot()<= potUpperLimit) {
+  //   digitalWrite(stepPin, HIGH);
+  //   delayMicroseconds(1000);
+  //   digitalWrite(stepPin, LOW);
+  //   delayMicroseconds(1000);
+  // }
 }
 
 
@@ -129,56 +127,63 @@ void loop() {
   // delay(2000);
 
   // ------------------- hysteresis control -------------------
-  while (true) {
-    float depth = sensor.depth();
-    bool stopped = true;
+  float depth = sensor.depth();
+  bool stopped = true;
 
-    // go up
-    if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(dirPin, dirUP);
+  // go up
+  if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
+    digitalWrite(ENABLE_PIN, LOW);
+    digitalWrite(dirPin, dirUP);
+    digitalWrite(stepPin, HIGH);
+    delayMicroseconds(1000);
+    digitalWrite(stepPin, LOW);
+    delayMicroseconds(1000);
+    stopped = false;
+  }
+
+  // go down
+  if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
+    digitalWrite(ENABLE_PIN, LOW);
+    digitalWrite(dirPin, dirDown);
+    delayMicroseconds(1000);
+    digitalWrite(stepPin, HIGH);
+    delayMicroseconds(1000);
+    digitalWrite(stepPin, LOW);
+    stopped = false;
+  }
+
+  // float is in range
+  if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS && !timerStarted) {
+    time = millis();
+    timerStarted = true;
+  }
+
+  // timer finished
+  if (timerStarted && millis() - time > 45000) {
+    digitalWrite(ENABLE_PIN, LOW);
+    digitalWrite(dirPin, dirUP);
+
+    // keep going up until we can't or we reach the top of the pool
+    while(depth >= 0.2 && readPot() <= potUpperLimit) {
+      depth = sensor.depth();
       digitalWrite(stepPin, HIGH);
       delayMicroseconds(1000);
       digitalWrite(stepPin, LOW);
       delayMicroseconds(1000);
-      stopped = false;
     }
 
-    // go down
-    if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(dirPin, dirDown);
-      delayMicroseconds(1000);
-      digitalWrite(stepPin, HIGH);
-      delayMicroseconds(1000);
-      digitalWrite(stepPin, LOW);
-      stopped = false;
+    // stop the motor
+    digitalWrite(ENABLE_PIN, HIGH);
+
+    // make sure we are at the top of the pool
+    while (depth >= 0.2) {
+      depth = sensor.depth();
     }
 
-    // float is in range
-    if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS && !timerStarted) {
-      time = millis();
-      timerStarted = true;
-      stopped = false;
-    }
+    timerStarted = false;
+  }
 
-    if (timerStarted && millis() - time > 45000) {
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(dirPin, dirUP);
-      while(depth >= 0.2 && readPot() <= potUpperLimit) {
-        digitalWrite(stepPin, HIGH);
-        delayMicroseconds(1000);
-        digitalWrite(stepPin, LOW);
-        delayMicroseconds(1000);
-      }
-
-      stopped = false;
-      timerStarted = false;
-      break;
-    }
-
-    if (stopped) {
-      digitalWrite(ENABLE_PIN, HIGH);
-    }
+  if (stopped) {
+    digitalWrite(ENABLE_PIN, HIGH);
   }
 }

@@ -5,10 +5,10 @@
 #define stepPin 11
 #define potPin A1
 #define enablePin 8
-#define potLowerLimit 15
+#define potLowerLimit 20
 #define potUpperLimit 1000
-#define dirUP LOW
-#define dirDown HIGH
+#define dirUP HIGH
+#define dirDown LOW
 #define ENABLE_PIN 8
 
 #define FLUID_DENSITY 997
@@ -134,8 +134,9 @@ void loop() {
     bool stopped = true;
 
     // go up
-    if (depth > SET_POINT + HYSTERESIS && readPot() <= potUpperLimit) {
+    if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
       digitalWrite(ENABLE_PIN, LOW);
+      digitalWrite(dirPin, dirUP);
       digitalWrite(stepPin, HIGH);
       delayMicroseconds(1000);
       digitalWrite(stepPin, LOW);
@@ -144,7 +145,7 @@ void loop() {
     }
 
     // go down
-    if (depth < SET_POINT - HYSTERESIS && readPot() >= potLowerLimit) {
+    if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
       digitalWrite(ENABLE_PIN, LOW);
       digitalWrite(dirPin, dirDown);
       delayMicroseconds(1000);

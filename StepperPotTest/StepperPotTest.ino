@@ -1,10 +1,12 @@
 #define dirPin 10
 #define stepPin 11
-#define potPin A0
-#define potLowerLimit 90
-#define potUpperLimit 970
-#define dirUP LOW
-#define dirDown HIGH
+#define potPin A1
+#define potLowerLimit 15
+#define potUpperLimit 1000
+#define dirUP HIGH
+#define dirDown LOW
+#define stepperStepTime 400
+
 
 void setup() {
   // put your setup code here, to run once:
@@ -23,17 +25,17 @@ void loop() {
   digitalWrite(dirPin, dirUP);
   while(readPot()<= potUpperLimit){
         digitalWrite(stepPin, HIGH);
-        delayMicroseconds(1000);
+        delayMicroseconds(stepperStepTime);
         digitalWrite(stepPin, LOW);
-        delayMicroseconds(1000);
+        delayMicroseconds(stepperStepTime);
   }
-  delay(90000);
+  delay(1000);
   digitalWrite(dirPin, dirDown);
   while(readPot() >= potLowerLimit){
         digitalWrite(stepPin, HIGH);
-        delayMicroseconds(1000);
+        delayMicroseconds(stepperStepTime);
         digitalWrite(stepPin, LOW);
-        delayMicroseconds(1000);
+        delayMicroseconds(stepperStepTime);
   }
-  delay(90000);
+  delay(1000);
 }

@@ -1,5 +1,6 @@
 #include <Wire.h>
 #include <MS5837.h>
+#include <EEPROM.h>
 
 #define dirPin 10
 #define stepPin 11
@@ -10,15 +11,19 @@
 #define dirUP HIGH
 #define dirDown LOW
 #define ENABLE_PIN 8
+#define stepperStepTime 500
 
 #define FLUID_DENSITY 997
 #define SET_POINT 1.5f
 #define HYSTERESIS 0.2f
 
 volatile float depth = 0;
+volatile float initialDepth = 0;
+int lastDepthAddr = 0;
 
 MS5837 sensor;
 unsigned long time;
+unsigned long lastReadingTime;
 bool timerStarted = false;
 
 int readPot(){
@@ -50,9 +55,9 @@ void goUp() {
   digitalWrite(dirPin, dirUP);
   if (readPot() <= potUpperLimit) {
     digitalWrite(stepPin, HIGH);
-    delayMicroseconds(1000);
+    delayMicroseconds(stepperStepTime);
     digitalWrite(stepPin, LOW);
-    delayMicroseconds(1000);
+    delayMicroseconds(stepperStepTime);
   }
 }
 
@@ -60,9 +65,9 @@ void goDown() {
   digitalWrite(dirPin, dirDown);
   if (readPot() >= potLowerLimit) {
     digitalWrite(stepPin, HIGH);
-    delayMicroseconds(1000);
+    delayMicroseconds(stepperStepTime);
     digitalWrite(stepPin, LOW);
-    delayMicroseconds(1000);
+    delayMicroseconds(stepperStepTime);
   }
 }
 
@@ -80,6 +85,11 @@ void setup() {
 
   Serial.begin(9600);
 
+  Serial.println("Last Depth Readings:");
+  for(int i = 0; i<=255; i++){
+    Serial.println(EEPROM.read(i));
+  }
+
   Wire.begin();
   while (!sensor.init()) {
     Serial.println("Init failed!");
@@ -91,56 +101,53 @@ void setup() {
 
   sensor.setModel(MS5837::MS5837_30BA);
   sensor.setFluidDensity(FLUID_DENSITY); // kg/m^3 (freshwater, 1029 for seawater)
+  sensor.read();
+  initialDepth = sensor.depth();
+  Serial.print("initial Depth = ");
+  Serial.println(initialDepth);
 
   time = millis();
+  lastReadingTime = millis();
 
   digitalWrite(ENABLE_PIN, LOW);
   
   // go up
-  digitalWrite(dirPin, dirUP);
-  while(readPot()<= potUpperLimit) {
-    digitalWrite(stepPin, HIGH);
-    delayMicroseconds(1000);
-    digitalWrite(stepPin, LOW);
-    delayMicroseconds(1000);
-  }
+  goUp();
 }
 
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  // goUp();
-  // digitalWrite(dirPin, dirUP);
-  // while(readPot()<= potUpperLimit){
-  //       digitalWrite(stepPin, HIGH);
-  //       delayMicroseconds(1000);
-  //       digitalWrite(stepPin, LOW);
-  //       delayMicroseconds(1000);
-  // }
-  // delay(2000);
-  // // goDown();
-  // digitalWrite(dirPin, dirDown);
-  // while(readPot() >= potLowerLimit){
-  //   digitalWrite(stepPin, HIGH);
-  //   delayMicroseconds(1000);
-  //   digitalWrite(stepPin, LOW);
-  //   delayMicroseconds(1000);
-  // }
-  // delay(2000);
-
   // ------------------- hysteresis control -------------------
   while (true) {
+    sensor.read();
     float depth = sensor.depth();
+    Serial.print("rawdepth = ");
+    Serial.println(depth);
+    if(initialDepth <= 0){
+      depth = depth - initialDepth;
+    } else {
+      depth = depth + initialDepth;
+    }
     bool stopped = true;
+
+    // storing depth values in EEPROM every two seconds
+    if((millis()-lastReadingTime)>2000){
+      EEPROM.update(lastDepthAddr, (byte)(-depth*100));
+      Serial.print("Stored A value");
+      Serial.print(depth);
+      Serial.println("in EEPROM");
+      lastDepthAddr = lastDepthAddr>=255 ? 0:(lastDepthAddr+1);
+      lastReadingTime = millis();
+    }
 
     // go up
     if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
       digitalWrite(ENABLE_PIN, LOW);
       digitalWrite(dirPin, dirUP);
       digitalWrite(stepPin, HIGH);
-      delayMicroseconds(1000);
+      delayMicroseconds(stepperStepTime);
       digitalWrite(stepPin, LOW);
-      delayMicroseconds(1000);
+      delayMicroseconds(stepperStepTime);
       stopped = false;
     }
 
@@ -148,9 +155,9 @@ void loop() {
     if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
       digitalWrite(ENABLE_PIN, LOW);
       digitalWrite(dirPin, dirDown);
-      delayMicroseconds(1000);
+      delayMicroseconds(stepperStepTime);
       digitalWrite(stepPin, HIGH);
-      delayMicroseconds(1000);
+      delayMicroseconds(stepperStepTime);
       digitalWrite(stepPin, LOW);
       stopped = false;
     }
@@ -167,9 +174,9 @@ void loop() {
       digitalWrite(dirPin, dirUP);
       while(depth >= 0.2 && readPot() <= potUpperLimit) {
         digitalWrite(stepPin, HIGH);
-        delayMicroseconds(1000);
+        delayMicroseconds(stepperStepTime);
         digitalWrite(stepPin, LOW);
-        delayMicroseconds(1000);
+        delayMicroseconds(stepperStepTime);
       }
 
       stopped = false;

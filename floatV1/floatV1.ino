@@ -16,8 +16,6 @@
 #define FLUID_DENSITY 997
 #define SET_POINT 1.5f
 #define HYSTERESIS 0.2f
-
-volatile float depth = 0;
 volatile float initialDepth = 0;
 int lastDepthAddr = 0;
 
@@ -162,30 +160,40 @@ void loop() {
       stopped = false;
     }
 
-    // float is in range
-    if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS && !timerStarted) {
-      time = millis();
-      timerStarted = true;
-      stopped = false;
+  // float is in range
+  if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS && !timerStarted) {
+    time = millis();
+    timerStarted = true;
+  }
+
+  // timer finished
+  if (timerStarted && millis() - time > 45000) {
+    digitalWrite(ENABLE_PIN, LOW);
+    digitalWrite(dirPin, dirUP);
+
+    // keep going up until we can't or we reach the top of the pool
+    while(depth >= 0.2 && readPot() <= potUpperLimit) {
+      depth readings here are not relative to starting point
+      sensor.read();
+      depth = sensor.depth();
+      digitalWrite(stepPin, HIGH);
+      delayMicroseconds(stepperStepTime);
+      digitalWrite(stepPin, LOW);
+      delayMicroseconds(stepperStepTime);
     }
 
-    if (timerStarted && millis() - time > 45000) {
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(dirPin, dirUP);
-      while(depth >= 0.2 && readPot() <= potUpperLimit) {
-        digitalWrite(stepPin, HIGH);
-        delayMicroseconds(stepperStepTime);
-        digitalWrite(stepPin, LOW);
-        delayMicroseconds(stepperStepTime);
-      }
+    // stop the motor
+    digitalWrite(ENABLE_PIN, HIGH);
 
-      stopped = false;
-      timerStarted = false;
-      break;
+    // make sure we are at the top of the pool
+    while (depth >= 0.2) {
+      depth = sensor.depth();
     }
 
-    if (stopped) {
-      digitalWrite(ENABLE_PIN, HIGH);
-    }
+    timerStarted = false;
+  }
+
+  if (stopped) {
+    digitalWrite(ENABLE_PIN, HIGH);
   }
 }

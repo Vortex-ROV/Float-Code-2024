@@ -17,6 +17,7 @@
 #define SET_POINT 1.5f
 #define HYSTERESIS 0.2f
 volatile float initialDepth = 0;
+volatile float depth = 0;
 int lastDepthAddr = 0;
 
 MS5837 sensor;
@@ -110,15 +111,17 @@ void setup() {
   digitalWrite(ENABLE_PIN, LOW);
   
   // go up
-  goUp();
-}
+  digitalWrite(dirPin, dirUP);
+  while(readPot() <= potUpperLimit){
+      digitalWrite(stepPin, HIGH);
+      delayMicroseconds(stepperStepTime);
+      digitalWrite(stepPin, LOW);
+      delayMicroseconds(stepperStepTime);
+      }
 
-
-void loop() {
-  // ------------------- hysteresis control -------------------
-  while (true) {
+void updateDepth(){
     sensor.read();
-    float depth = sensor.depth();
+    depth = sensor.depth();
     Serial.print("rawdepth = ");
     Serial.println(depth);
     if(initialDepth <= 0){
@@ -126,6 +129,11 @@ void loop() {
     } else {
       depth = depth + initialDepth;
     }
+}
+
+void loop() {
+  // ------------------- hysteresis control -------------------
+    updateDepth();
     bool stopped = true;
 
     // storing depth values in EEPROM every two seconds
@@ -173,9 +181,7 @@ void loop() {
 
     // keep going up until we can't or we reach the top of the pool
     while(depth >= 0.2 && readPot() <= potUpperLimit) {
-      depth readings here are not relative to starting point
-      sensor.read();
-      depth = sensor.depth();
+      updateDepth();
       digitalWrite(stepPin, HIGH);
       delayMicroseconds(stepperStepTime);
       digitalWrite(stepPin, LOW);

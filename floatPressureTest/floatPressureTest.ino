@@ -1,11 +1,11 @@
 #include <Wire.h>
 #include <MS5837.h>
 #include <EEPROM.h>
+#include <TimerOne.h>
 
 #define dirPin 10
 #define stepPin 11
 #define potPin A1
-#define enablePin 8
 #define potLowerLimit 20
 #define potUpperLimit 1000
 #define dirUP HIGH
@@ -14,16 +14,19 @@
 #define stepperStepTime 500
 
 #define FLUID_DENSITY 997
-#define SET_POINT 1.5f
-#define HYSTERESIS 0.2f
+#define SET_POINT 0.2f
+#define HYSTERESIS 0.03f
 volatile float initialDepth = 0;
 volatile float depth = 0;
 int lastDepthAddr = 0;
 
 MS5837 sensor;
-unsigned long time;
+unsigned long time = 0;
 unsigned long lastReadingTime;
-bool timerStarted = false;
+unsigned long lastTime;
+bool timerEnded = false;
+bool inRange = false;
+bool stepperState = LOW;
 
 int readPot(){
   int potVal = analogRead(potPin);
@@ -50,33 +53,35 @@ void readPressureSensor() {
   Serial.println(" m above mean sea level");
 }
 
-void goUp() {
-  digitalWrite(dirPin, dirUP);
-  if (readPot() <= potUpperLimit) {
-    digitalWrite(stepPin, HIGH);
-    delayMicroseconds(stepperStepTime);
-    digitalWrite(stepPin, LOW);
-    delayMicroseconds(stepperStepTime);
-  }
+void toggleStep(){
+  stepperState = !stepperState;
+  digitalWrite(stepPin, stepperState);
 }
 
-void goDown() {
-  digitalWrite(dirPin, dirDown);
-  if (readPot() >= potLowerLimit) {
-    digitalWrite(stepPin, HIGH);
-    delayMicroseconds(stepperStepTime);
-    digitalWrite(stepPin, LOW);
-    delayMicroseconds(stepperStepTime);
-  }
+void updateDepth(){
+    sensor.read();
+    depth = sensor.depth();
+    Serial.println(depth);
+    if(initialDepth <= 0){
+      depth = depth - initialDepth;
+    } else {
+      depth = depth + initialDepth;
+    }
 }
 
-void stop() {
-  digitalWrite(stepPin, LOW);
-  Serial.println("Stopped!");
+void storeEEPROM(){
+    if((millis()-lastReadingTime)>2000){
+    EEPROM.update(lastDepthAddr, (byte)(-depth*100));
+    Serial.print("Stored A value");
+    Serial.print(depth);
+    Serial.println("in EEPROM");
+    lastDepthAddr = lastDepthAddr>=255 ? 0:(lastDepthAddr+1);
+    lastReadingTime = millis();
+  }
 }
 
 void setup() {
-  // put your setup code here, to run once:
+  // Initializing pins
   pinMode(stepPin, OUTPUT);
   pinMode(dirPin, OUTPUT);
   pinMode(potPin, INPUT);
@@ -107,10 +112,9 @@ void setup() {
 
   time = millis();
   lastReadingTime = millis();
-
-  digitalWrite(ENABLE_PIN, LOW);
   
   // go up
+  digitalWrite(ENABLE_PIN, LOW);
   digitalWrite(dirPin, dirUP);
   while(readPot() <= potUpperLimit){
       digitalWrite(stepPin, HIGH);
@@ -118,88 +122,50 @@ void setup() {
       digitalWrite(stepPin, LOW);
       delayMicroseconds(stepperStepTime);
       }
-
-void updateDepth(){
-    sensor.read();
-    depth = sensor.depth();
-    Serial.print("rawdepth = ");
-    Serial.println(depth);
-    if(initialDepth <= 0){
-      depth = depth - initialDepth;
-    } else {
-      depth = depth + initialDepth;
-    }
+  
+  Timer1.initialize(stepperStepTime);
+  Timer1.attachInterrupt(toggleStep);
 }
 
 void loop() {
   // ------------------- hysteresis control -------------------
     updateDepth();
-    bool stopped = true;
+    storeEEPROM();
 
-    // storing depth values in EEPROM every two seconds
-    if((millis()-lastReadingTime)>2000){
-      EEPROM.update(lastDepthAddr, (byte)(-depth*100));
-      Serial.print("Stored A value");
-      Serial.print(depth);
-      Serial.println("in EEPROM");
-      lastDepthAddr = lastDepthAddr>=255 ? 0:(lastDepthAddr+1);
-      lastReadingTime = millis();
+    if(!timerEnded){
+      // go up
+      if(time == 45000000){
+        timerEnded = true;
+      }
+      else if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
+        digitalWrite(ENABLE_PIN, LOW);
+        digitalWrite(dirPin, dirUP);
+        stepperState = HIGH;
+      }
+      // go down
+      else if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
+        digitalWrite(ENABLE_PIN, LOW);
+        digitalWrite(dirPin, dirDown);
+        stepperState = HIGH;
+      }
+      // float is in range
+      else if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS) {
+        digitalWrite(ENABLE_PIN, HIGH);
+        time += micros() - lastTime;
+      }
+      else{
+        digitalWrite(ENABLE_PIN, HIGH);
+      }
+      lastTime = micros();
+    } else {
+      // timer finished
+      if (readPot() <= potUpperLimit) {
+        digitalWrite(ENABLE_PIN, LOW);
+        digitalWrite(dirPin, dirUP);
+        stepperState = HIGH;
+      } else {
+        digitalWrite(ENABLE_PIN, HIGH);
+      }
     }
-
-    // go up
-    if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(dirPin, dirUP);
-      digitalWrite(stepPin, HIGH);
-      delayMicroseconds(stepperStepTime);
-      digitalWrite(stepPin, LOW);
-      delayMicroseconds(stepperStepTime);
-      stopped = false;
-    }
-
-    // go down
-    if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(dirPin, dirDown);
-      delayMicroseconds(stepperStepTime);
-      digitalWrite(stepPin, HIGH);
-      delayMicroseconds(stepperStepTime);
-      digitalWrite(stepPin, LOW);
-      stopped = false;
-    }
-
-  // float is in range
-  if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS && !timerStarted) {
-    time = millis();
-    timerStarted = true;
-  }
-
-  // timer finished
-  if (timerStarted && millis() - time > 45000) {
-    digitalWrite(ENABLE_PIN, LOW);
-    digitalWrite(dirPin, dirUP);
-
-    // keep going up until we can't or we reach the top of the pool
-    while(depth >= 0.2 && readPot() <= potUpperLimit) {
-      updateDepth();
-      digitalWrite(stepPin, HIGH);
-      delayMicroseconds(stepperStepTime);
-      digitalWrite(stepPin, LOW);
-      delayMicroseconds(stepperStepTime);
-    }
-
-    // stop the motor
-    digitalWrite(ENABLE_PIN, HIGH);
-
-    // make sure we are at the top of the pool
-    while (depth >= 0.2) {
-      depth = sensor.depth();
-    }
-
-    timerStarted = false;
-  }
-
-  if (stopped) {
-    digitalWrite(ENABLE_PIN, HIGH);
-  }
+  
 }

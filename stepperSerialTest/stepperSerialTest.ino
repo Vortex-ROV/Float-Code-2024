@@ -1,8 +1,9 @@
-#define arduino
+#define esp32
 
 #ifdef esp32
-#define dirPin 26
-#define stepPin 25
+#define dirPin 32
+#define stepPin 33
+#define enablePin 25
 #endif
 
 #ifdef arduino
@@ -10,14 +11,26 @@
 #define stepPin 11
 #endif
 
-#define stepsPerRevolution 1000
+const int adcPin = 34; // GPIO34 (ADC1 channel 6)
 
+void printPot(){
+  int adcValue = analogRead(adcPin);
+  int adcMillivolts = analogReadMilliVolts(adcPin);
+  
+  // Print the ADC value to the Serial Monitor
+  Serial.print("ADC Value: ");
+  Serial.println(adcValue);
+  Serial.print("ADC Value Millivolts: ");
+  Serial.println(adcMillivolts);
+}
 int noOfSteps = 0;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   pinMode(stepPin, OUTPUT);
   pinMode(dirPin, OUTPUT);
+  pinMode(enablePin, OUTPUT);
+  digitalWrite(enablePin, LOW);
   }
 
 void loop() {
@@ -30,11 +43,10 @@ void loop() {
       while (true) {
         // Step forward
         digitalWrite(stepPin, HIGH);
-        delayMicroseconds(1000);
+        delayMicroseconds(100);
         digitalWrite(stepPin, LOW);
-        delayMicroseconds(1000);
+        delayMicroseconds(100);
         noOfSteps++;
-
 
         // Check if there's new command
         if (Serial.available()) {
@@ -55,9 +67,9 @@ void loop() {
       while (true) {
         // Step backward
         digitalWrite(stepPin, HIGH);
-        delayMicroseconds(1000);
+        delayMicroseconds(100);
         digitalWrite(stepPin, LOW);
-        delayMicroseconds(1000);
+        delayMicroseconds(100);
         noOfSteps++;
         // Check if there's new command
         if (Serial.available()) {
@@ -70,6 +82,9 @@ void loop() {
           }
         }
       }
+    }
+    else if (command == 'p'){
+      printPot();
     }
   }
 }

@@ -8,8 +8,8 @@
 #define potPin A1
 #define potLowerLimit 20
 #define potUpperLimit 1000
-#define dirUP HIGH
-#define dirDown LOW
+#define dirUP LOW
+#define dirDown HIGH
 #define ENABLE_PIN 8
 #define stepperStepTime 500
 
@@ -134,7 +134,7 @@ void loop() {
 
     if(!timerEnded){
       // go up
-      if(time == 45000000){
+      if(time >= 45000000){
         timerEnded = true;
       }
       else if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {

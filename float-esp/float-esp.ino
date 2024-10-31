@@ -234,24 +234,20 @@ void loop() {
         digitalWrite(ENABLE_PIN, LOW);
         digitalWrite(dirPin, dirUP);
         stepperState = HIGH;
-        Serial.println("a7a");
       }
       // go down
       else if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
         digitalWrite(ENABLE_PIN, LOW);
         digitalWrite(dirPin, dirDown);
         stepperState = HIGH;
-        Serial.println("a7aa");
       }
       // float is in range
       else if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS) {
         digitalWrite(ENABLE_PIN, HIGH);
         trialTime += micros() - lastTime;
-        Serial.println("a7aaa");
       }
       else{
         digitalWrite(ENABLE_PIN, HIGH);
-        Serial.println("a7aaaaaaaaaaaaa");
       }
       lastTime = micros();
     } else {

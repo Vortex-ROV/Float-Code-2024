@@ -1,56 +1,42 @@
 #include <Wire.h>
 #include <MS5837.h>
-#include <EEPROM.h>
-#include <TimerOne.h>
+#include <esp_timer.h>
 
-#define dirPin 10
-#define stepPin 11
-#define potPin A1
-#define potLowerLimit 20
-#define potUpperLimit 1000
-#define dirUP LOW
-#define dirDown HIGH
-#define ENABLE_PIN 8
-#define stepperStepTime 500
+
+#define dirPin 32
+#define stepPin 33
+#define potPin 34
+#define potLowerLimit 143
+#define potUpperLimit 2900
+#define dirUP HIGH
+#define dirDown LOW
+#define ENABLE_PIN 25
+#define stepperStepTime 80
 
 #define FLUID_DENSITY 997
-#define SET_POINT 0.2f
-#define HYSTERESIS 0.03f
+#define SET_POINT 1.5f
+#define HYSTERESIS 0.2f
+
+hw_timer_t *timer = NULL;
+volatile bool stepperState = HIGH;
+
+void IRAM_ATTR onTimer() {
+  stepperState = !stepperState;
+  digitalWrite(stepPin, stepperState);
+}
 volatile float initialDepth = 0;
 volatile float depth = 0;
 int lastDepthAddr = 0;
 
 MS5837 sensor;
-unsigned long time = 0;
-unsigned long lastReadingTime;
-unsigned long lastTime;
+unsigned long long trialTime = 0;
+unsigned long long lastReadingTime;
+unsigned long long lastTime;
 bool timerEnded = false;
 bool inRange = false;
-bool stepperState = LOW;
 
 int readPot(){
-  int potVal = analogRead(potPin);
-  return potVal;
-}
-
-void readPressureSensor() {
-  sensor.read();
-
-  Serial.print("Pressure: ");
-  Serial.print(sensor.pressure());
-  Serial.println(" mbar");
-
-  Serial.print("Temperature: ");
-  Serial.print(sensor.temperature());
-  Serial.println(" deg C");
-
-  Serial.print("Depth: ");
-  Serial.print(sensor.depth());
-  Serial.println(" m");
-
-  Serial.print("Altitude: ");
-  Serial.print(sensor.altitude());
-  Serial.println(" m above mean sea level");
+  return analogReadMilliVolts(potPin);
 }
 
 void toggleStep(){
@@ -61,7 +47,6 @@ void toggleStep(){
 void updateDepth(){
     sensor.read();
     depth = sensor.depth();
-    Serial.println(depth);
     if(initialDepth <= 0){
       depth = depth - initialDepth;
     } else {
@@ -69,30 +54,16 @@ void updateDepth(){
     }
 }
 
-void storeEEPROM(){
-    if((millis()-lastReadingTime)>2000){
-    EEPROM.update(lastDepthAddr, (byte)(-depth*100));
-    Serial.print("Stored A value");
-    Serial.print(depth);
-    Serial.println("in EEPROM");
-    lastDepthAddr = lastDepthAddr>=255 ? 0:(lastDepthAddr+1);
-    lastReadingTime = millis();
-  }
-}
 
 void setup() {
   // Initializing pins
   pinMode(stepPin, OUTPUT);
   pinMode(dirPin, OUTPUT);
   pinMode(potPin, INPUT);
-  pinMode(13, OUTPUT);
+  pinMode(ENABLE_PIN, OUTPUT);
 
-  Serial.begin(9600);
+  Serial.begin(115200);
 
-  Serial.println("Last Depth Readings:");
-  for(int i = 0; i<=255; i++){
-    Serial.println(EEPROM.read(i));
-  }
 
   Wire.begin();
   while (!sensor.init()) {
@@ -110,9 +81,6 @@ void setup() {
   Serial.print("initial Depth = ");
   Serial.println(initialDepth);
 
-  time = millis();
-  lastReadingTime = millis();
-  
   // go up
   digitalWrite(ENABLE_PIN, LOW);
   digitalWrite(dirPin, dirUP);
@@ -122,19 +90,26 @@ void setup() {
       digitalWrite(stepPin, LOW);
       delayMicroseconds(stepperStepTime);
       }
-  
-  Timer1.initialize(stepperStepTime);
-  Timer1.attachInterrupt(toggleStep);
+
+  // Initialize the timer
+  timer = timerBegin(1000000);
+  if (timer == NULL) {
+      Serial.println("Failed to initialize timer");
+      return;
+  }
+  timerAttachInterrupt(timer, &onTimer);
+  timerAlarm(timer,100,true, 0);
+
+  lastTime = micros(); // to account for setup time.
 }
 
 void loop() {
   // ------------------- hysteresis control -------------------
     updateDepth();
-    storeEEPROM();
 
     if(!timerEnded){
       // go up
-      if(time >= 45000000){
+      if(trialTime >= 45000000){
         timerEnded = true;
       }
       else if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
@@ -151,7 +126,7 @@ void loop() {
       // float is in range
       else if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS) {
         digitalWrite(ENABLE_PIN, HIGH);
-        time += micros() - lastTime;
+        trialTime += micros() - lastTime;
       }
       else{
         digitalWrite(ENABLE_PIN, HIGH);

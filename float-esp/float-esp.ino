@@ -1,43 +1,49 @@
 #include <Wire.h>
 #include <MS5837.h>
+#include <esp_timer.h>
 #include <LittleFS.h>
 #include <esp_now.h>
 #include <WiFi.h>
-// #include <EEPROM.h>
-// #include <TimerOne.h>
 
 #define dirPin 32
 #define stepPin 33
 #define potPin 34
-#define potLowerLimit 20
-#define potUpperLimit 1000
+#define potLowerLimit 143
+#define potUpperLimit 2900
 #define dirUP HIGH
 #define dirDown LOW
-#define ENABLE_PIN 16
-#define stepperStepTime 500
+#define ENABLE_PIN 23
+#define stepperStepTime 70
+#define StepperTimerTime 100
 
 #define FLUID_DENSITY 997
-#define SET_POINT 0.2f
-#define HYSTERESIS 0.03f
+#define SET_POINT 1.5f
+#define HYSTERESIS 0.2f
+
+hw_timer_t *timer = NULL;
+volatile bool stepperState = HIGH;
+File file;
+esp_now_peer_info_t peer;
 
 volatile float initialDepth = 0;
 volatile float depth = 0;
 int lastDepthAddr = 0;
 
-File file;
-  esp_now_peer_info_t peer;
-
 MS5837 sensor;
-unsigned long totalTime = 0;
-unsigned long lastReadingTime;
-unsigned long lastTime;
+unsigned long long trialTime = 0;
+unsigned long long lastReadingTime = 0;
+unsigned long long lastTime;
+unsigned long long timer2;
 bool timerEnded = false;
 bool inRange = false;
-bool stepperState = LOW;
 
-int readPot() {
-  int potVal = analogRead(potPin);
-  return potVal;
+void IRAM_ATTR onTimer() {
+  stepperState = !stepperState;
+  digitalWrite(stepPin, stepperState);
+}
+
+int readPot(){
+  return analogReadMilliVolts(potPin);
 }
 
 void formatLittleFS() {
@@ -49,21 +55,38 @@ void formatLittleFS() {
   }
 }
 
-void initLittleFS() {
-  if (!LittleFS.begin()) {
-    Serial.println("LittleFS Mount Failed");
-    formatLittleFS();  // Format LittleFS if mount fails
-    if (!LittleFS.begin()) {
-      Serial.println("LittleFS Mount Failed after formatting");
-      return;
-    }
+void espNowSend(String data) {
+  digitalWrite(ENABLE_PIN, HIGH);
+  int index = 0;
+  while (index < data.length()) {
+    int sentSize = min(data.length() - index, (unsigned int)ESP_NOW_MAX_DATA_LEN);
+    ESP_ERROR_CHECK(esp_now_send(peer.peer_addr, (uint8_t*)(data.c_str() + index), sentSize));
+    index += sentSize;
   }
+}
 
-  file = LittleFS.open("/data.txt", FILE_WRITE);
+void toggleStep(){
+  stepperState = !stepperState;
+  digitalWrite(stepPin, stepperState);
+}
+
+void sendDepthData() {
+  file.close();
+  file = LittleFS.open("/data.txt", FILE_READ);
   if (!file) {
-    Serial.println("Failed to open file for writing");
+    Serial.println("Failed to open file for Reading");
     return;
   }
+
+  while(file.available()) {
+    espNowSend(file.readStringUntil('\n'));
+    delay(20);
+  }
+
+  file.close();
+
+  file = LittleFS.open("/data.txt", FILE_APPEND);
+  file.printf("Starting New Profile\n");
 }
 
 void initEspNow() {
@@ -83,6 +106,51 @@ void initEspNow() {
   ESP_ERROR_CHECK(esp_now_add_peer(&peer));
 }
 
+void initLittleFS() {
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS Mount Failed");
+    formatLittleFS();  // Format LittleFS if mount fails
+    if (!LittleFS.begin()) {
+      Serial.println("LittleFS Mount Failed after formatting");
+      return;
+    }
+  }
+  file = LittleFS.open("/data.txt", FILE_READ);
+  if (!file) {
+    Serial.println("Failed to open file for Reading");
+  }
+
+  while(file.available()) {
+    Serial.println(file.readStringUntil('\n'));
+    delay(20);
+  }
+
+  file.close();
+  file = LittleFS.open("/data.txt", FILE_APPEND);
+  if (!file) {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+}
+
+void updateDepth(){
+  if((millis() - lastReadingTime) >= 500){
+  sensor.read();
+  depth = sensor.depth();
+
+  if(initialDepth <= 0) {
+    depth = depth + initialDepth;
+  } else {
+    depth = depth - initialDepth;
+  }
+
+  // espNowSend(String(depth));
+  file.printf("%f\n", depth);
+  // Serial.println(depth);
+  lastReadingTime = millis();
+  }
+}
+
 void initBar30() {
   Wire.begin();
   while (!sensor.init()) {
@@ -95,162 +163,107 @@ void initBar30() {
 
   sensor.setModel(MS5837::MS5837_30BA);
   sensor.setFluidDensity(FLUID_DENSITY); // kg/m^3 (freshwater, 1029 for seawater)
-}
-
-void espNowSend(String data) {
-  int index = 0;
-  while (index < data.length()) {
-    int sentSize = min(data.length() - index, (unsigned int)ESP_NOW_MAX_DATA_LEN);
-    ESP_ERROR_CHECK(esp_now_send(peer.peer_addr, (uint8_t*)(data.c_str() + index), sentSize));
-    index += sentSize;
-  }
-}
-
-void sendDepthData() {
-  file.close();
-  file = LittleFS.open("/data.txt", FILE_READ);
-  if (!file) {
-    Serial.println("Failed to open file for writing");
-    return;
-  }
-
-  while(file.available()) {
-    espNowSend(file.readStringUntil('\n'));
-    delay(20);
-  }
-
-  file.close();
-
-  file = LittleFS.open("/data.txt", FILE_WRITE);
-}
-
-void readPressureSensor() {
-  sensor.read();
-
-  Serial.print("Pressure: ");
-  Serial.print(sensor.pressure());
-  Serial.println(" mbar");
-
-  Serial.print("Temperature: ");
-  Serial.print(sensor.temperature());
-  Serial.println(" deg C");
-
-  Serial.print("Depth: ");
-  Serial.print(sensor.depth());
-  Serial.println(" m");
-
-  Serial.print("Altitude: ");
-  Serial.print(sensor.altitude());
-  Serial.println(" m above mean sea level");
-}
-
-void toggleStep(){
-  stepperState = !stepperState;
-  digitalWrite(stepPin, stepperState);
-}
-
-void updateDepth(){
-  sensor.read();
-  depth = sensor.depth();
-
-  if(initialDepth <= 0) {
-    depth = depth - initialDepth;
-  } else {
-    depth = depth + initialDepth;
-  }
-
-  // espNowSend(String(depth));
-  file.printf("%f\n", depth);
-  // Serial.println(depth);
-}
-
-unsigned long timer2;
-
-void setup() {
-  Serial.begin(115200);
-
-  // Initializing pins
-  pinMode(stepPin, OUTPUT);
-  pinMode(dirPin, OUTPUT);
-  pinMode(potPin, INPUT);
-  pinMode(13, OUTPUT);
-
-
-  initLittleFS();
-  initEspNow();
-  initBar30();
-  
   sensor.read();
   initialDepth = sensor.depth();
   Serial.print("initial Depth = ");
   Serial.println(initialDepth);
-
-  totalTime = millis();
-  lastReadingTime = millis();
-  
-  // go up
-  // digitalWrite(ENABLE_PIN, LOW);
-  // digitalWrite(dirPin, dirUP);
-  // while(readPot() <= potUpperLimit){
-  //   digitalWrite(stepPin, HIGH);
-  //   delayMicroseconds(stepperStepTime);
-  //   digitalWrite(stepPin, LOW);
-  //   delayMicroseconds(stepperStepTime);
-  // }
-  
-  // Timer1.initialize(stepperStepTime);
-  // Timer1.attachInterrupt(toggleStep);
-  timer2 = millis();
 }
 
+void initPins() {
+  pinMode(stepPin, OUTPUT);
+  pinMode(dirPin, OUTPUT);
+  pinMode(potPin, INPUT);
+  pinMode(ENABLE_PIN, OUTPUT);
+}
+
+void setup() {
+  Serial.begin(115200);
+  initPins();
+  Serial.println("Pins intialized");
+  initLittleFS();
+  Serial.println("LittleFS intialized");
+  initEspNow();
+  Serial.println("EspNOW intialized");
+  initBar30();
+  Serial.println("Bar30 intialized");
+
+  // go up
+  digitalWrite(ENABLE_PIN, LOW);
+  digitalWrite(dirPin, dirUP);
+  while(readPot() <= potUpperLimit){
+      digitalWrite(stepPin, HIGH);
+      delayMicroseconds(stepperStepTime);
+      digitalWrite(stepPin, LOW);
+      delayMicroseconds(stepperStepTime);
+      }
+
+  // Initialize the timer
+  timer = timerBegin(1000000);
+  if (timer == NULL) {
+      Serial.println("Failed to initialize timer");
+      return;
+  } else {
+      Serial.println("Timer intialized");
+  }
+  timerAttachInterrupt(timer, &onTimer);
+  timerAlarm(timer,StepperTimerTime,true, 0);
+
+  lastTime = micros(); // to account for setup time.
+  timer2 = millis();
+  lastReadingTime = millis();
+  Serial.println("Loop Starting");
+}
 
 void loop() {
   // ------------------- hysteresis control -------------------
     updateDepth();
-    // storeEEPROM();
 
-    if (millis() - timer2 >= 30000) {
-      Serial.println("Sending");
-      sendDepthData();
-      Serial.println("Stopped Sending");
-      timer2 = millis();
-    }
-
-
-    // if(!timerEnded){
-    //   // go up
-    //   if(totalTime >= 45000000){
-    //     timerEnded = true;
-    //   }
-    //   else if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
-    //     digitalWrite(ENABLE_PIN, LOW);
-    //     digitalWrite(dirPin, dirUP);
-    //     stepperState = HIGH;
-    //   }
-    //   // go down
-    //   else if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
-    //     digitalWrite(ENABLE_PIN, LOW);
-    //     digitalWrite(dirPin, dirDown);
-    //     stepperState = HIGH;
-    //   }
-    //   // float is in range
-    //   else if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS) {
-    //     digitalWrite(ENABLE_PIN, HIGH);
-    //     totalTime += micros() - lastTime;
-    //   }
-    //   else{
-    //     digitalWrite(ENABLE_PIN, HIGH);
-    //   }
-    //   lastTime = micros();
-    // } else {
-    //   // timer finished
-    //   if (readPot() <= potUpperLimit) {
-    //     digitalWrite(ENABLE_PIN, LOW);
-    //     digitalWrite(dirPin, dirUP);
-    //     stepperState = HIGH;
-    //   } else {
-    //     digitalWrite(ENABLE_PIN, HIGH);
-    //   }
+    // if (millis() - timer2 >= 30000) {
+    //   Serial.println("Sending");
+    //   sendDepthData();
+    //   Serial.println("Stopped Sending");
+    //   timer2 = millis();
     // }
+
+    if(!timerEnded){
+      // go up
+      if(trialTime >= 45000000){
+        timerEnded = true;
+      }
+      else if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
+        digitalWrite(ENABLE_PIN, LOW);
+        digitalWrite(dirPin, dirUP);
+        stepperState = HIGH;
+        Serial.println("a7a");
+      }
+      // go down
+      else if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
+        digitalWrite(ENABLE_PIN, LOW);
+        digitalWrite(dirPin, dirDown);
+        stepperState = HIGH;
+        Serial.println("a7aa");
+      }
+      // float is in range
+      else if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS) {
+        digitalWrite(ENABLE_PIN, HIGH);
+        trialTime += micros() - lastTime;
+        Serial.println("a7aaa");
+      }
+      else{
+        digitalWrite(ENABLE_PIN, HIGH);
+        Serial.println("a7aaaaaaaaaaaaa");
+      }
+      lastTime = micros();
+    } else {
+      // timer finished
+      if (readPot() <= potUpperLimit) {
+        digitalWrite(ENABLE_PIN, LOW);
+        digitalWrite(dirPin, dirUP);
+        stepperState = HIGH;
+      } else {
+        digitalWrite(ENABLE_PIN, HIGH);
+      }
+    }
   
 }
+

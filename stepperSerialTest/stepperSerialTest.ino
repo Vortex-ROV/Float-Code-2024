@@ -4,6 +4,7 @@
 #define dirPin 32
 #define stepPin 33
 #define enablePin 25
+#define adcPin  34
 #endif
 
 #ifdef arduino
@@ -11,7 +12,6 @@
 #define stepPin 11
 #endif
 
-const int adcPin = 34; // GPIO34 (ADC1 channel 6)
 
 void printPot(){
   int adcValue = analogRead(adcPin);

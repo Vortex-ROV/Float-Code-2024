@@ -3,7 +3,7 @@
 #define potPin 34
 #define enablePin 25
 #define potLowerLimit 143
-#define potUpperLimit 3164
+#define potUpperLimit 2900
 #define dirUP HIGH
 #define dirDown LOW
 #define stepperStepTime 80
@@ -11,6 +11,7 @@
 
 void setup() {
   // put your setup code here, to run once:
+  Serial.begin(115200);
   pinMode(stepPin, OUTPUT);
   pinMode(dirPin, OUTPUT);
   pinMode(potPin, INPUT);
@@ -19,26 +20,31 @@ void setup() {
 }
 
 int readPot(){
-  int potVal = analogReadMilliVolts(potPin);
-  return potVal;
+  return analogReadMilliVolts(potPin);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   digitalWrite(dirPin, dirUP);
-  while(readPot()<= potUpperLimit){
+  int pot = readPot();
+  while(pot <= potUpperLimit){
         digitalWrite(stepPin, HIGH);
         delayMicroseconds(stepperStepTime);
         digitalWrite(stepPin, LOW);
         delayMicroseconds(stepperStepTime);
+        pot = readPot();
   }
+  Serial.println(pot);
   delay(1000);
   digitalWrite(dirPin, dirDown);
-  while(readPot() >= potLowerLimit){
+  pot = readPot();
+  while(pot >= potLowerLimit){
         digitalWrite(stepPin, HIGH);
         delayMicroseconds(stepperStepTime);
         digitalWrite(stepPin, LOW);
         delayMicroseconds(stepperStepTime);
+        pot = readPot();
   }
+  Serial.println(pot);
   delay(1000);
 }

@@ -15,6 +15,7 @@
 #define ENABLE_PIN 23
 #define stepperStepTime 70
 #define StepperTimerTime 100
+#define timeBetweenSteps 20000
 
 #define FLUID_DENSITY 997
 #define SET_POINT 1.5f
@@ -72,7 +73,7 @@ void toggleStep(){
 
 void sendDepthData() {
   file.close();
-  file = LittleFS.open("/data.txt", FILE_READ);
+  file = LittleFS.open("/NeutralPt.txt", FILE_READ);
   if (!file) {
     Serial.println("Failed to open file for Reading");
     return;
@@ -85,7 +86,7 @@ void sendDepthData() {
 
   file.close();
 
-  file = LittleFS.open("/data.txt", FILE_APPEND);
+  file = LittleFS.open("/NeutralPt.txt", FILE_APPEND);
   file.printf("Starting New Profile\n");
 }
 
@@ -115,7 +116,7 @@ void initLittleFS() {
       return;
     }
   }
-  file = LittleFS.open("/data.txt", FILE_READ);
+  file = LittleFS.open("/NeutralPt.txt", FILE_READ);
   if (!file) {
     Serial.println("Failed to open file for Reading");
   }
@@ -125,26 +126,19 @@ void initLittleFS() {
   }
 
   file.close();
-  file = LittleFS.open("/data.txt", FILE_APPEND);
+  file = LittleFS.open("/NeutralPt.txt", FILE_APPEND);
   if (!file) {
     Serial.println("Failed to open file for writing");
     return;
   }
+  file.printf("Modified Hysterisis Run");
 }
 
 void updateDepth(){
   if((millis() - lastReadingTime) >= 500){
   sensor.read();
-  depth = sensor.depth();
-
-  if(initialDepth <= 0) {
-    depth = depth + initialDepth;
-  } else {
-    depth = depth - initialDepth;
-  }
-
-  // espNowSend(String(depth));
-  file.printf("%f\n", depth);
+  depth = sensor.depth() - initialDepth + 0.335;
+  file.printf("Timestamp: %d Depth: %f PotPosition: %d\n", millis(), depth, readPot());
   file.flush(); // Ensure data is written
   lastReadingTime = millis();
   }
@@ -163,7 +157,7 @@ void initBar30() {
   sensor.setModel(MS5837::MS5837_30BA);
   sensor.setFluidDensity(FLUID_DENSITY); // kg/m^3 (freshwater, 1029 for seawater)
   sensor.read();
-  initialDepth = sensor.depth();
+  initialDepth = abs(sensor.depth());
   Serial.print("initial Depth = ");
   Serial.println(initialDepth);
 }
@@ -195,6 +189,7 @@ void setup() {
       digitalWrite(stepPin, LOW);
       delayMicroseconds(stepperStepTime);
       }
+  digitalWrite(ENABLE_PIN, HIGH);
 
   // Initialize the timer
   timer = timerBegin(1000000);
@@ -213,52 +208,37 @@ void setup() {
 }
 
 void loop() {
-  // ------------------- hysteresis control -------------------
-    updateDepth();
-
-    // if (millis() - timer2 >= 30000) {
-    //   Serial.println("Sending");
-    //   sendDepthData();
-    //   Serial.println("Stopped Sending");
-    //   timer2 = millis();
-    // }
-
-    if(!timerEnded){
-      // go up
-      if(trialTime >= 45000000){
-        timerEnded = true;
-      }
-      else if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
-        digitalWrite(ENABLE_PIN, LOW);
-        digitalWrite(dirPin, dirUP);
-        // stepperState = HIGH;
-      }
-      // go down
-      else if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
-        digitalWrite(ENABLE_PIN, LOW);
+  static int profileNo = 0;
+  file.printf("Starting Neutral Point Test Profile #%d\n",profileNo);
+  profileNo++;
+  file.flush();
+for (int testPoint = potUpperLimit; testPoint >= potLowerLimit; testPoint = (testPoint > 143 ? testPoint - 100 : 143)) {
+    Serial.println(testPoint);
+    while (readPot() >= testPoint) {
+        updateDepth();
         digitalWrite(dirPin, dirDown);
-        // stepperState = HIGH;
-      }
-      // float is in range
-      else if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS) {
-        digitalWrite(ENABLE_PIN, HIGH);
-        trialTime += micros() - lastTime;
-      }
-      else{
-        stepperState = HIGH;
-        digitalWrite(ENABLE_PIN, HIGH);
-      }
-      lastTime = micros();
-    } else {
-      // timer finished
-      if (readPot() <= potUpperLimit) {
         digitalWrite(ENABLE_PIN, LOW);
-        digitalWrite(dirPin, dirUP);
-        stepperState = HIGH;
-      } else {
-        digitalWrite(ENABLE_PIN, HIGH);
-      }
     }
-  
+    digitalWrite(ENABLE_PIN, HIGH);
+    int lastTime = millis();
+    while ((millis() - lastTime) < timeBetweenSteps) {
+        updateDepth();
+    }
+}
+
+for (int testPoint = potLowerLimit; testPoint <= potUpperLimit; testPoint = (testPoint < 2900 ? testPoint + 100 : 2900)) {
+    Serial.println(testPoint);
+    while (readPot() <= testPoint) {
+        updateDepth();
+        digitalWrite(dirPin, dirUP);
+        digitalWrite(ENABLE_PIN, LOW);
+    }
+    digitalWrite(ENABLE_PIN, HIGH);
+    int lastTime = millis();
+    while ((millis() - lastTime) < timeBetweenSteps) {
+        updateDepth();
+    }
+}
+
 }
 

@@ -10,7 +10,7 @@
 #define potUpperLimit 2900
 #define dirUP HIGH
 #define dirDown LOW
-#define ENABLE_PIN 25
+#define ENABLE_PIN 23
 #define stepperStepTime 80
 
 #define FLUID_DENSITY 997

@@ -15,10 +15,12 @@
 #define ENABLE_PIN 23
 #define stepperStepTime 70
 #define StepperTimerTime 100
+#define depthUpperLimit 1
+#define depthLowerLimit 2
 
 #define FLUID_DENSITY 997
 #define SET_POINT 1.5f
-#define HYSTERESIS 0.2f
+#define HYSTERESIS 0.3f
 
 hw_timer_t *timer = NULL;
 volatile bool stepperState = HIGH;
@@ -130,22 +132,17 @@ void initLittleFS() {
     Serial.println("Failed to open file for writing");
     return;
   }
+  file.printf("Modified Hysterisis Run\n\n");
+  file.flush();
 }
 
 void updateDepth(){
   if((millis() - lastReadingTime) >= 500){
   sensor.read();
-  depth = sensor.depth();
-
-  if(initialDepth <= 0) {
-    depth = depth + initialDepth;
-  } else {
-    depth = depth - initialDepth;
-  }
-
-  // espNowSend(String(depth));
-  file.printf("%f\n", depth);
+  depth = sensor.depth() - initialDepth + 0.335;
+  file.printf("Timestamp: %d Depth: %f PotPosition: %d\n", millis(), depth, readPot());
   file.flush(); // Ensure data is written
+  Serial.println(depth);
   lastReadingTime = millis();
   }
 }
@@ -163,7 +160,7 @@ void initBar30() {
   sensor.setModel(MS5837::MS5837_30BA);
   sensor.setFluidDensity(FLUID_DENSITY); // kg/m^3 (freshwater, 1029 for seawater)
   sensor.read();
-  initialDepth = sensor.depth();
+  initialDepth = abs(sensor.depth());
   Serial.print("initial Depth = ");
   Serial.println(initialDepth);
 }
@@ -231,22 +228,31 @@ void loop() {
       else if ((depth > SET_POINT + HYSTERESIS) && (readPot() <= potUpperLimit)) {
         digitalWrite(ENABLE_PIN, LOW);
         digitalWrite(dirPin, dirUP);
-        // stepperState = HIGH;
       }
       // go down
       else if ((depth < SET_POINT - HYSTERESIS) && (readPot() >= potLowerLimit)) {
         digitalWrite(ENABLE_PIN, LOW);
         digitalWrite(dirPin, dirDown);
-        // stepperState = HIGH;
-      }
-      // float is in range
-      else if (depth >= SET_POINT - HYSTERESIS && depth <= SET_POINT + HYSTERESIS) {
-        digitalWrite(ENABLE_PIN, HIGH);
-        trialTime += micros() - lastTime;
+      } 
+      else if ((depth < SET_POINT + HYSTERESIS) && (depth > SET_POINT - HYSTERESIS)) {
+        int potPosition = map(depth*100, (SET_POINT - HYSTERESIS)*100, (SET_POINT + HYSTERESIS)*100, potLowerLimit, potUpperLimit);
+        Serial.println(potPosition);
+        if(readPot() > potPosition){
+            digitalWrite(ENABLE_PIN, LOW);
+            digitalWrite(dirPin, dirDown);
+        } else if (readPot() < potPosition){
+            digitalWrite(ENABLE_PIN, LOW);
+            digitalWrite(dirPin, dirUP);
+        } else {
+          digitalWrite(ENABLE_PIN, HIGH);
+        }
       }
       else{
-        stepperState = HIGH;
         digitalWrite(ENABLE_PIN, HIGH);
+      }
+      // float is in range
+      if (depth > depthUpperLimit && depth < depthLowerLimit) {
+        trialTime += micros() - lastTime;
       }
       lastTime = micros();
     } else {
@@ -254,7 +260,6 @@ void loop() {
       if (readPot() <= potUpperLimit) {
         digitalWrite(ENABLE_PIN, LOW);
         digitalWrite(dirPin, dirUP);
-        stepperState = HIGH;
       } else {
         digitalWrite(ENABLE_PIN, HIGH);
       }

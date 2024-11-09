@@ -3,7 +3,7 @@
 #ifdef esp32
 #define dirPin 32
 #define stepPin 33
-#define enablePin 25
+#define enablePin 23
 #define adcPin  34
 #endif
 

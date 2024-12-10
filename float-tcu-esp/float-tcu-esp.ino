@@ -4,7 +4,7 @@
 #include <string>
 #include <queue>
 
-// cc:7b:5c:a7:7f:cc
+// d0:ef:76:13:b9:18
 
 esp_now_peer_info_t peer;
 
@@ -52,7 +52,7 @@ void setup() {
   esp_now_register_recv_cb(onReceive);
 
   // set mac address of the peer
-  // d0:ef:76:13:b9:18
+  // cc:7b:5c:a7:7f:cc
   uint8_t peerAddress[] = { 0xcc, 0x7b, 0x5c, 0xa7, 0x7f, 0xcc  };
   for (int i = 0; i < 6; i++) {
     peer.peer_addr[i] = peerAddress[i];

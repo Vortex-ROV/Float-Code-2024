@@ -53,7 +53,7 @@ void setup() {
 
   // set mac address of the peer
   // d0:ef:76:13:b9:18
-  uint8_t peerAddress[] = { 0xd0, 0xef, 0x76, 0x13, 0xb9, 0x18 };
+  uint8_t peerAddress[] = { 0xcc, 0x7b, 0x5c, 0xa7, 0x7f, 0xcc  };
   for (int i = 0; i < 6; i++) {
     peer.peer_addr[i] = peerAddress[i];
   }

@@ -38,6 +38,7 @@ unsigned long long lastTime;
 unsigned long long timer2;
 bool timerEnded = false;
 bool inRange = false;
+bool sendingData = false;
 
 void IRAM_ATTR onTimer() {
   stepperState = !stepperState;
@@ -73,25 +74,30 @@ void toggleStep(){
 }
 
 void sendDepthData() {
-  file.close();
-  file = LittleFS.open("/data.txt", FILE_READ);
-  if (!file) {
-    Serial.println("Failed to open file for Reading");
-    return;
+  static bool fileOpen = false;
+  if(sendingData){
+    if (!fileOpen){
+    file.close();
+    file = LittleFS.open("/data.txt", FILE_READ);
+    if (!file) {
+      Serial.println("Failed to open file for Reading");
+      return;
+    }
+    fileOpen = true;
+    }
+    if (file.available()) {
+      espNowSend(file.readStringUntil('\n'));
+      delay(35);
+  } 
+  } else {
+    fileOpen = false;
+    file.close();
+    file = LittleFS.open("/data.txt", FILE_APPEND);
   }
-
-  while(file.available()) {
-    espNowSend(file.readStringUntil('\n'));
-    delay(20);
-  }
-
-  file.close();
-
-  file = LittleFS.open("/data.txt", FILE_APPEND);
-  file.printf("Starting New Profile\n");
 }
 
 void initEspNow() {
+  digitalWrite(ENABLE_PIN, HIGH);
   memset(&peer, 0, sizeof(esp_now_peer_info_t));
 
   WiFi.mode(WIFI_STA);
@@ -100,7 +106,7 @@ void initEspNow() {
 
   // set mac address of the peer
   // cc:7b:5c:a7:7f:cc
-  uint8_t peer_address[] = { 0xcc, 0x7b, 0x5c, 0xa7, 0x7f, 0xcc };
+  uint8_t peer_address[] = { 0xd0, 0xef, 0x76, 0x13, 0xb9, 0x18 };
   for (int i = 0; i < 6; i++) {
     peer.peer_addr[i] = peer_address[i];
   }
@@ -109,6 +115,7 @@ void initEspNow() {
 }
 
 void initLittleFS() {
+  digitalWrite(ENABLE_PIN, HIGH);
   if (!LittleFS.begin()) {
     Serial.println("LittleFS Mount Failed");
     formatLittleFS();  // Format LittleFS if mount fails
@@ -117,7 +124,7 @@ void initLittleFS() {
       return;
     }
   }
-  file = LittleFS.open("/data.txt", FILE_READ);
+  file = LittleFS.open("/data.txt", FILE_APPEND);
   if (!file) {
     Serial.println("Failed to open file for Reading");
   }
@@ -134,6 +141,7 @@ void initLittleFS() {
   }
   file.printf("Modified Hysterisis Run\n\n");
   file.flush();
+  digitalWrite(ENABLE_PIN, LOW);
 }
 
 void updateDepth(){
@@ -178,10 +186,16 @@ void setup() {
   Serial.println("Pins intialized");
   initLittleFS();
   Serial.println("LittleFS intialized");
-  // initEspNow();
-  // Serial.println("EspNOW intialized");
+  initEspNow();
+  Serial.println("EspNOW intialized");
   initBar30();
   Serial.println("Bar30 intialized");
+  sendingData = true;
+  for(int i = 0; i<=10; i++ ){
+  sendDepthData();
+  }
+  sendingData = false;
+  sendDepthData();
 
   // go up
   digitalWrite(ENABLE_PIN, LOW);
@@ -212,13 +226,6 @@ void setup() {
 void loop() {
   // ------------------- hysteresis control -------------------
     updateDepth();
-
-    // if (millis() - timer2 >= 30000) {
-    //   Serial.println("Sending");
-    //   sendDepthData();
-    //   Serial.println("Stopped Sending");
-    //   timer2 = millis();
-    // }
 
     if(!timerEnded){
       // go up
@@ -262,6 +269,8 @@ void loop() {
         digitalWrite(dirPin, dirUP);
       } else {
         digitalWrite(ENABLE_PIN, HIGH);
+        sendingData = true;
+        sendDepthData();
       }
     }
   

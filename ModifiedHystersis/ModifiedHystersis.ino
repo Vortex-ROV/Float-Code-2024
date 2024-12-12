@@ -4,6 +4,13 @@
 #include <LittleFS.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
+#include <string>
+#include <ESPmDNS.h>
+#include <NetworkUdp.h>
+#include <ArduinoOTA.h>
+#include <RTClib.h>
+
 
 #define dirPin 32
 #define stepPin 33
@@ -26,6 +33,7 @@ hw_timer_t *timer = NULL;
 volatile bool stepperState = HIGH;
 File file;
 esp_now_peer_info_t peer;
+RTC_DS3231 rtc;
 
 volatile float initialDepth = 0;
 volatile float depth = 0;
@@ -96,6 +104,14 @@ void sendDepthData() {
   }
 }
 
+void initRTC(){
+    if (! rtc.begin()) {
+    Serial.println("RTC module is NOT found");
+    Serial.flush();
+    while (1);
+  }
+}
+
 void initEspNow() {
   digitalWrite(ENABLE_PIN, HIGH);
   memset(&peer, 0, sizeof(esp_now_peer_info_t));
@@ -124,7 +140,7 @@ void initLittleFS() {
       return;
     }
   }
-  file = LittleFS.open("/data.txt", FILE_APPEND);
+  file = LittleFS.open("/data.txt", FILE_READ);
   if (!file) {
     Serial.println("Failed to open file for Reading");
   }
@@ -148,9 +164,9 @@ void updateDepth(){
   if((millis() - lastReadingTime) >= 500){
   sensor.read();
   depth = sensor.depth() - initialDepth + 0.335;
-  file.printf("Timestamp: %d Depth: %f PotPosition: %d\n", millis(), depth, readPot());
+  file.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
   file.flush(); // Ensure data is written
-  Serial.println(depth);
+  Serial.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
   lastReadingTime = millis();
   }
 }
@@ -180,6 +196,12 @@ void initPins() {
   pinMode(ENABLE_PIN, OUTPUT);
 }
 
+String getRTCTime() {
+  DateTime now = rtc.now();
+  String dateTimeString = String(now.year()) + "/" + String(now.month()) + "/" + String(now.day()) + " " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
+  return dateTimeString;
+}
+
 void setup() {
   Serial.begin(115200);
   initPins();
@@ -190,6 +212,9 @@ void setup() {
   Serial.println("EspNOW intialized");
   initBar30();
   Serial.println("Bar30 intialized");
+  initRTC();
+  Serial.println("RTC Initialized");
+
   sendingData = true;
   for(int i = 0; i<=10; i++ ){
   sendDepthData();

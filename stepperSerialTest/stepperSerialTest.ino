@@ -18,8 +18,8 @@ void printPot(){
   int adcMillivolts = analogReadMilliVolts(adcPin);
   
   // Print the ADC value to the Serial Monitor
-  Serial.print("ADC Value: ");
-  Serial.println(adcValue);
+  // Serial.print("ADC Value: ");
+  // Serial.println(adcValue);
   Serial.print("ADC Value Millivolts: ");
   Serial.println(adcMillivolts);
 }
@@ -34,6 +34,7 @@ void setup() {
   }
 
 void loop() {
+  printPot();
   if (Serial.available()) {
     char command = Serial.read();
 

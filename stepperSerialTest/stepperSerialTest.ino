@@ -30,6 +30,7 @@ void setup() {
   pinMode(stepPin, OUTPUT);
   pinMode(dirPin, OUTPUT);
   pinMode(enablePin, OUTPUT);
+  pinMode(adcPin, INPUT);
   digitalWrite(enablePin, LOW);
   }
 
@@ -66,7 +67,7 @@ void loop() {
       // Rotate in the opposite direction continuously
       digitalWrite(dirPin, HIGH);
       while (true) {
-        // Step backward
+        // Step  backward
         digitalWrite(stepPin, HIGH);
         delayMicroseconds(100);
         digitalWrite(stepPin, LOW);
@@ -87,5 +88,7 @@ void loop() {
     else if (command == 'p'){
       printPot();
     }
+  } else {
+    printPot();
   }
 }

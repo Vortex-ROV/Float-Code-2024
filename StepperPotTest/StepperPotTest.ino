@@ -2,8 +2,8 @@
 #define stepPin 33
 #define potPin 34
 #define enablePin 23
-#define potLowerLimit 200
-#define potUpperLimit 3000
+#define potLowerLimit 250
+#define potUpperLimit 2850
 #define dirUP HIGH
 #define dirDown LOW
 #define stepperStepTime 80

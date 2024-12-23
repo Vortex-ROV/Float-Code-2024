@@ -32,7 +32,7 @@ void loop () {
   Serial.print('/');
   Serial.print(now.day(), DEC);
   Serial.print(" (");
-  Serial.print(daysOfWeek[now.dayOfTheWeek()]);
+  Serial.print(now.dayOfTheWeek());
   Serial.print(") ");
   Serial.print(now.hour(), DEC);
   Serial.print(':');

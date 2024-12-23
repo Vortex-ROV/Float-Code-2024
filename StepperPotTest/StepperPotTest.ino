@@ -1,7 +1,7 @@
 #define dirPin 32
 #define stepPin 33
 #define potPin 34
-#define enablePin 25
+#define enablePin 23
 #define potLowerLimit 143
 #define potUpperLimit 2900
 #define dirUP HIGH

@@ -23,7 +23,7 @@
 #define STEPPER_TIMER_TIME 100
 
 #define FLUID_DENSITY 997
-#define SET_POINT 2.5f
+#define SET_POINT 1.5f
 #define HYSTERESIS 0.3f
 #define RANGE 0.5f
 
@@ -69,6 +69,7 @@ void formatLittleFS() {
 }
 
 void espNowSend(String data) {
+  Serial.println("Sending: " + data);
   digitalWrite(ENABLE_PIN, HIGH);
   int index = 0;
   while (index < data.length()) {
@@ -76,6 +77,7 @@ void espNowSend(String data) {
     ESP_ERROR_CHECK(esp_now_send(peer.peer_addr, (uint8_t*)(data.c_str() + index), sentSize));
     index += sentSize;
   }
+  Serial.println("Sent: " + data);
 }
 
 void toggleStep() {
@@ -167,7 +169,7 @@ void initLittleFS() {
 void updateDepth() {
   sensor.read();
   depth = sensor.depth() - initialDepth + 0.335;
-  file.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
+  // file.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
   file.flush(); // Ensure data is written
   Serial.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
   lastReadingTime = millis();
@@ -204,6 +206,52 @@ String getRTCTime() {
   return dateTimeString;
 }
 
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+bool shouldGoUp() {
+  return depth > DEPTH_LOWER_LIMIT && readPot() <= POT_UPPER_LIMIT;
+}
+
+bool shouldGoDown() {
+  return depth < DEPTH_UPPER_LIMIT && readPot() >= POT_LOWER_LIMIT;
+}
+
+bool inHisteresis() {
+  return depth < SET_POINT + HYSTERESIS && depth > SET_POINT - HYSTERESIS;
+}
+
+void goUp(int stepCount) {
+  digitalWrite(ENABLE_PIN, LOW);
+  digitalWrite(DIR_PIN, DIR_UP);
+  for (int i = 0; i < stepCount && readPot() <= POT_UPPER_LIMIT; i++) {
+    digitalWrite(STEP_PIN, HIGH);
+    delayMicroseconds(STEPPER_STEP_TIME);
+    digitalWrite(STEP_PIN, LOW);
+    delayMicroseconds(STEPPER_STEP_TIME);
+  }
+}
+
+void goDown(int stepCount) {
+  digitalWrite(ENABLE_PIN, LOW);
+  digitalWrite(DIR_PIN, DIR_DOWN);
+  for (int i = 0; i < stepCount && readPot() >= POT_LOWER_LIMIT; i++) {
+    digitalWrite(STEP_PIN, HIGH);
+    delayMicroseconds(STEPPER_STEP_TIME);
+    digitalWrite(STEP_PIN, LOW);
+    delayMicroseconds(STEPPER_STEP_TIME);
+  }
+  digitalWrite(ENABLE_PIN, HIGH);
+}
+
 void setup() {
   Serial.begin(115200);
   initPins();
@@ -225,25 +273,16 @@ void setup() {
   // sendDepthData();
 
   // go up
-  digitalWrite(ENABLE_PIN, LOW);
-  digitalWrite(DIR_PIN, DIR_UP);
-  while (readPot() <= POT_UPPER_LIMIT) {
-    digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(STEPPER_STEP_TIME);
-    digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(STEPPER_STEP_TIME);
-  }
+  // digitalWrite(ENABLE_PIN, LOW);
+  // digitalWrite(DIR_PIN, DIR_UP);
+  // while (readPot() <= POT_UPPER_LIMIT) {
+  //   digitalWrite(STEP_PIN, HIGH);
+  //   delayMicroseconds(STEPPER_STEP_TIME);
+  //   digitalWrite(STEP_PIN, LOW);
+  //   delayMicroseconds(STEPPER_STEP_TIME);
+  // }
 
-  // Initialize the timer
-  timer = timerBegin(1000000);
-  if (timer == NULL) {
-      Serial.println("Failed to initialize timer");
-      return;
-  } else {
-      Serial.println("Timer intialized");
-  }
-  timerAttachInterrupt(timer, &onTimer);
-  timerAlarm(timer,STEPPER_TIMER_TIME,true, 0);
+  goUp(20 * 1000 * 1000);
 
   lastTime = micros(); // to account for setup time.
   timer2 = millis();
@@ -285,66 +324,37 @@ void setup() {
   ArduinoOTA.begin();
 }
 
-bool inRange() {
-  return depth > DEPTH_UPPER_LIMIT && depth < DEPTH_LOWER_LIMIT;
-}
+// bool inRange() {
+//   return depth > DEPTH_UPPER_LIMIT && depth < DEPTH_LOWER_LIMIT;
+// }
 
-bool shouldGoUp() {
-  return depth > SET_POINT + HYSTERESIS && readPot() <= POT_UPPER_LIMIT;
-}
-
-bool shouldGoDown() {
-  return depth < SET_POINT - HYSTERESIS && readPot() >= POT_LOWER_LIMIT;
-}
-
-bool inHisteresis() {
-  return depth < SET_POINT + HYSTERESIS && depth > SET_POINT - HYSTERESIS;
-}
+#define BETWEEN_STEP_TIME 3 * 1000 * 1000
+unsigned long long lastStepTime = 0;
 
 void loop() {
   ArduinoOTA.handle();
   // ------------------- hysteresis control -------------------
   updateDepth();
+  Serial.println("depth: " + String(depth));
 
   if (!timerEnded) {
     if (trialTime >= 45 * 1000 * 1000) {
       timerEnded = true;
-    } else if (shouldGoUp()) {
-      espNowSend("out of range going up");
-      // out of range going up
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(DIR_PIN, DIR_UP);
-    } else if (shouldGoDown()) {
-      // out of range going down
-      espNowSend("out of range going down");
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(DIR_PIN, DIR_DOWN);
-    } else if (inHisteresis()) {
-      // in histeresis
-      espNowSend("in histeresis");
-      int potPosition = map(depth*100, (SET_POINT - HYSTERESIS)*100, (SET_POINT + HYSTERESIS)*100, POT_LOWER_LIMIT, POT_UPPER_LIMIT);
-      Serial.println(potPosition);
-      if (readPot() > potPosition) {
-        digitalWrite(ENABLE_PIN, LOW);
-        digitalWrite(DIR_PIN, DIR_DOWN);
-      } else if (readPot() < potPosition) {
-        digitalWrite(ENABLE_PIN, LOW);
-        digitalWrite(DIR_PIN, DIR_UP);
-      } else {
-        digitalWrite(ENABLE_PIN, HIGH);
-      }
+    } else if (shouldGoDown() && micros() - lastStepTime >= BETWEEN_STEP_TIME) {
+      espNowSend("going down more. pot: " + String(readPot()));
+      Serial.println("going down more. pot: " + String(readPot()));
+      goDown(3600);
+      lastStepTime = micros();
+    } else if (shouldGoUp() && micros() - lastStepTime >= BETWEEN_STEP_TIME) {
+      espNowSend("going up more. pot: " + String(readPot()));
+      Serial.println("going down more. pot: " + String(readPot()));
+      goUp(3600);
+      lastStepTime = micros();
     } else {
-      // in range but not histeresis
-      espNowSend("in range but not histeresis");
-      digitalWrite(ENABLE_PIN, HIGH);
-    }
-
-    if (inRange()) {
-      // in range
-      espNowSend("in range");
+      espNowSend("going up more. pot: " + String(readPot()));
       trialTime += micros() - lastTime;
     }
-    
+
     lastTime = micros();
   } else {
     // timer finished

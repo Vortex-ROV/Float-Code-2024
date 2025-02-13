@@ -11,26 +11,25 @@
 #include <ArduinoOTA.h>
 #include <RTClib.h>
 
-#define DIR_PIN 32
-#define STEP_PIN 33
+#define DIR_PIN 16
+#define PWM_PIN 17
+#define MOTOR_SPEED 255
+
 #define POT_PIN 34
-#define POT_LOWER_LIMIT 350
-#define POT_UPPER_LIMIT 2850
-#define DIR_UP HIGH
-#define DIR_DOWN LOW
-#define ENABLE_PIN 23
-#define STEPPER_STEP_TIME 70
-#define STEPPER_TIMER_TIME 100
+#define POT_LOWER_LIMIT 120
+#define POT_UPPER_LIMIT 3200
+#define DIR_UP LOW
+#define DIR_DOWN HIGH
 
 #define FLUID_DENSITY 997
-#define SET_POINT 1.0f
-#define HYSTERESIS 0.2f
-#define RANGE 0.2f
+#define SET_POINT 2.5f
+#define HYSTERESIS 0.3f
+#define RANGE 0.5f
+
 #define DEPTH_UPPER_LIMIT (SET_POINT - RANGE)
 #define DEPTH_LOWER_LIMIT (SET_POINT + RANGE)
 
 hw_timer_t *timer = NULL;
-volatile bool stepperState = HIGH;
 File file;
 esp_now_peer_info_t peer;
 RTC_DS3231 rtc;
@@ -48,13 +47,12 @@ bool timerEnded = false;
 // bool inRange = false;
 bool sendingData = false;
 
-void IRAM_ATTR onTimer() {
-  stepperState = !stepperState;
-  digitalWrite(STEP_PIN, stepperState);
-}
+float x = 0;
 
 int readPot() {
-  return analogReadMilliVolts(POT_PIN);
+  x = ( 99.0 * x + (analogRead(POT_PIN)/4)) / 100.0;
+  float y = ( x * 4095.0 /1134.0);
+  return y;
 }
 
 void formatLittleFS() {
@@ -63,25 +61,17 @@ void formatLittleFS() {
     Serial.println("LittleFS formatted successfully.");
   } else {
     Serial.println("Failed to format LittleFS.");
-
   }
 }
 
 void espNowSend(String data) {
-  Serial.println("Sending: " + data);
-  digitalWrite(ENABLE_PIN, HIGH);
+  stopMotor();
   int index = 0;
   while (index < data.length()) {
     int sentSize = min(data.length() - index, (unsigned int)ESP_NOW_MAX_DATA_LEN);
     ESP_ERROR_CHECK(esp_now_send(peer.peer_addr, (uint8_t*)(data.c_str() + index), sentSize));
     index += sentSize;
   }
-  Serial.println("Sent: " + data);
-}
-
-void toggleStep() {
-  stepperState = !stepperState;
-  digitalWrite(STEP_PIN, stepperState);
 }
 
 void sendDepthData() {
@@ -117,7 +107,7 @@ void initRTC() {
 }
 
 void initEspNow() {
-  digitalWrite(ENABLE_PIN, HIGH);
+  stopMotor();
   memset(&peer, 0, sizeof(esp_now_peer_info_t));
 
   WiFi.mode(WIFI_AP_STA);
@@ -136,7 +126,7 @@ void initEspNow() {
 }
 
 void initLittleFS() {
-  digitalWrite(ENABLE_PIN, HIGH);
+  stopMotor();
   if (!LittleFS.begin()) {
     Serial.println("LittleFS Mount Failed");
     formatLittleFS();  // Format LittleFS if mount fails
@@ -162,7 +152,6 @@ void initLittleFS() {
   }
   file.printf("Modified Hysterisis Run\n\n");
   file.flush();
-  digitalWrite(ENABLE_PIN, LOW);
 }
 
 void updateDepth() {
@@ -170,7 +159,7 @@ void updateDepth() {
   depth = sensor.depth() - initialDepth + 0.335;
   // file.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
   file.flush(); // Ensure data is written
-  Serial.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
+  // Serial.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
   lastReadingTime = millis();
 }
 
@@ -193,63 +182,29 @@ void initBar30() {
 }
 
 void initPins() {
-  pinMode(STEP_PIN, OUTPUT);
+  pinMode(PWM_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
   pinMode(POT_PIN, INPUT);
-  pinMode(ENABLE_PIN, OUTPUT);
 }
 
-String getRTCTime() {
-  DateTime now = rtc.now();
-  String dateTimeString = String(now.year()) + "/" + String(now.month()) + "/" + String(now.day()) + " " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
-  return dateTimeString;
-}
+// String getRTCTime() {
+//   DateTime now = rtc.now();
+//   String dateTimeString = String(now.year()) + "/" + String(now.month()) + "/" + String(now.day()) + " " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
+//   return dateTimeString;
+// }
 
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-
-bool shouldGoUp() {
-  return depth > DEPTH_LOWER_LIMIT && readPot() <= POT_UPPER_LIMIT;
-}
-
-bool shouldGoDown() {
-  return depth < DEPTH_UPPER_LIMIT && readPot() >= POT_LOWER_LIMIT;
-}
-
-bool inHisteresis() {
-  return depth < SET_POINT + HYSTERESIS && depth > SET_POINT - HYSTERESIS;
-}
-
-void goUp(int stepCount) {
-  digitalWrite(ENABLE_PIN, LOW);
+void moveMotorUp() {
   digitalWrite(DIR_PIN, DIR_UP);
-  for (int i = 0; i < stepCount && readPot() <= POT_UPPER_LIMIT; i++) {
-    digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(STEPPER_STEP_TIME);
-    digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(STEPPER_STEP_TIME);
-  }
-  digitalWrite(ENABLE_PIN, HIGH);
+  analogWrite(PWM_PIN, MOTOR_SPEED);
 }
 
-void goDown(int stepCount) {
-  digitalWrite(ENABLE_PIN, LOW);
+void moveMotorDown() {
   digitalWrite(DIR_PIN, DIR_DOWN);
-  for (int i = 0; i < stepCount && readPot() >= POT_LOWER_LIMIT; i++) {
-    digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(STEPPER_STEP_TIME);
-    digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(STEPPER_STEP_TIME);
-  }
-  digitalWrite(ENABLE_PIN, HIGH);
+  analogWrite(PWM_PIN, MOTOR_SPEED);
+}
+
+void stopMotor() {
+  analogWrite(PWM_PIN, 0);
 }
 
 void setup() {
@@ -262,7 +217,7 @@ void setup() {
   Serial.println("EspNOW intialized");
   initBar30();
   Serial.println("Bar30 intialized");
-  initRTC();
+  // initRTC();
   Serial.println("RTC Initialized");
 
   // sendingData = true;
@@ -273,16 +228,10 @@ void setup() {
   // sendDepthData();
 
   // go up
-  // digitalWrite(ENABLE_PIN, LOW);
-  // digitalWrite(DIR_PIN, DIR_UP);
-  // while (readPot() <= POT_UPPER_LIMIT) {
-  //   digitalWrite(STEP_PIN, HIGH);
-  //   delayMicroseconds(STEPPER_STEP_TIME);
-  //   digitalWrite(STEP_PIN, LOW);
-  //   delayMicroseconds(STEPPER_STEP_TIME);
-  // }
-
-  goUp(20 * 1000 * 1000);
+  while (readPot() <= POT_UPPER_LIMIT) {
+    moveMotorUp();
+  }
+  stopMotor();
 
   lastTime = micros(); // to account for setup time.
   timer2 = millis();
@@ -328,43 +277,70 @@ bool inRange() {
   return depth > DEPTH_UPPER_LIMIT && depth < DEPTH_LOWER_LIMIT;
 }
 
-#define BETWEEN_STEP_TIME 3 * 1000 * 1000
-unsigned long long lastStepTime = 0;
+bool shouldGoUp() {
+  return depth > SET_POINT + HYSTERESIS && readPot() <= POT_UPPER_LIMIT;
+}
+
+bool shouldGoDown() {
+  return depth < SET_POINT - HYSTERESIS && readPot() >= POT_LOWER_LIMIT;
+}
+
+bool inHisteresis() {
+  return depth < SET_POINT + HYSTERESIS && depth > SET_POINT - HYSTERESIS;
+}
 
 void loop() {
+  updateDepth();
   ArduinoOTA.handle();
   // ------------------- hysteresis control -------------------
-  updateDepth();
-  Serial.println("depth: " + String(depth));
 
   if (!timerEnded) {
     if (trialTime >= 45 * 1000 * 1000) {
       timerEnded = true;
-    } else if (shouldGoDown() && micros() - lastStepTime >= BETWEEN_STEP_TIME) {
-      espNowSend("going down more. pot: " + String(readPot()));
-      goDown(3600);
-      lastStepTime = micros();
-    } else if (shouldGoUp() && micros() - lastStepTime >= BETWEEN_STEP_TIME) {
-      espNowSend("going up more. pot: " + String(readPot()));
-      Serial.println("going down more. pot: " + String(readPot()));
-      goUp(3600);
-      lastStepTime = micros();
-    } else if (inRange()) {
-      espNowSend("in range: " + String(readPot()));
-      trialTime += micros() - lastTime;
+    } else if (shouldGoUp()) {
+      // Serial.println("out of range going up");
+      // espNowSend("out of range going up");
+      // out of range going up
+      moveMotorUp();
+    } else if (shouldGoDown()) {
+      // out of range going down
+      // espNowSend("out of range going down");
+      // Serial.println("out of range going down");
+      moveMotorDown();
+    } else if (inHisteresis()) {
+      // in histeresis
+      // espNowSend("in histeresis");
+      // Serial.println("in histeresis");
+      int potPosition = map(depth * 100, (SET_POINT - HYSTERESIS) * 100, (SET_POINT + HYSTERESIS) * 100, POT_LOWER_LIMIT, POT_UPPER_LIMIT);
+      // Serial.println(potPosition);
+      if (readPot() > potPosition) {
+        moveMotorDown();
+      } else if (readPot() < potPosition) {
+        moveMotorUp();
+      } else {
+        stopMotor();
+      }
+    } else {
+      stopMotor();
     }
 
+    if (inRange()) {
+      // in range
+      // espNowSend("in range");
+      // Serial.println("in range");
+      trialTime += micros() - lastTime;
+    }
+    
     lastTime = micros();
   } else {
     // timer finished
-    espNowSend("timer finished");
+    // espNowSend("timer finished");
     if (readPot() <= POT_UPPER_LIMIT) {
-      digitalWrite(ENABLE_PIN, LOW);
-      digitalWrite(DIR_PIN, DIR_UP);
+      moveMotorUp();
     } else {
-      digitalWrite(ENABLE_PIN, HIGH);
+      stopMotor();
       sendingData = true;
-      // sendDepthData();
+      sendDepthData();
     }
   }
 }

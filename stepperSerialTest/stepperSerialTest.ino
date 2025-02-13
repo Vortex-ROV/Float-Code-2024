@@ -1,94 +1,63 @@
 #define esp32
 
-#ifdef esp32
-#define dirPin 32
-#define stepPin 33
-#define enablePin 23
-#define adcPin  34
-#endif
+#define DIR_PIN 16
+#define PWM_PIN 17
+#define adcPin 34
 
-#ifdef arduino
-#define dirPin 10
-#define stepPin 11
-#endif
+#define MOTOR_SPEED 255
+#define DIR_UP LOW
+#define DIR_DOWN HIGH
 
+// 3200 - 120
 
-void printPot(){
-  int adcValue = analogRead(adcPin);
-  int adcMillivolts = analogReadMilliVolts(adcPin);
-  
-  // Print the ADC value to the Serial Monitor
-  // Serial.print("ADC Value: ");
-  // Serial.println(adcValue);
-  Serial.print("ADC Value Millivolts: ");
-  Serial.println(adcMillivolts);
+float x = 0;
+float y = 0;
+
+void updatePot() {
+  x = ( 99.0 * x + (analogRead(34)/4)) / 100.0;
+  y = ( x * 4095.0 /1134.0);
 }
-int noOfSteps = 0;
+
+void printPot() {
+  Serial.print("ADC Value Millivolts: ");
+  Serial.println(y);
+}
 
 void setup() {
   Serial.begin(115200);
-  pinMode(stepPin, OUTPUT);
-  pinMode(dirPin, OUTPUT);
-  pinMode(enablePin, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(PWM_PIN, OUTPUT);
   pinMode(adcPin, INPUT);
-  digitalWrite(enablePin, LOW);
-  }
+}
+
+void moveMotorUp() {
+  digitalWrite(DIR_PIN, DIR_UP);
+  analogWrite(PWM_PIN, MOTOR_SPEED);
+}
+
+void moveMotorDown() {
+  digitalWrite(DIR_PIN, DIR_DOWN);
+  analogWrite(PWM_PIN, MOTOR_SPEED);
+}
+
+void stopMotor() {
+  analogWrite(PWM_PIN, 0);
+}
 
 void loop() {
-  printPot();
+  updatePot();
   if (Serial.available()) {
     char command = Serial.read();
 
-    if (command == 'r') {
-      // Rotate in one direction continuously
-      digitalWrite(dirPin, LOW);
-      while (true) {
-        // Step forward
-        digitalWrite(stepPin, HIGH);
-        delayMicroseconds(100);
-        digitalWrite(stepPin, LOW);
-        delayMicroseconds(100);
-        noOfSteps++;
-
-        // Check if there's new command
-        if (Serial.available()) {
-          char newCommand = Serial.read();
-          if (newCommand == 'l' || newCommand == '0') {
-            Serial.print("Number of Steps = ");
-            Serial.println(noOfSteps);
-            noOfSteps = 0;
-            break;  // Exit the loop to change direction or stop
-          }
-        }
-      }
-    }
-
-    else if (command == 'l') {
-      // Rotate in the opposite direction continuously
-      digitalWrite(dirPin, HIGH);
-      while (true) {
-        // Step  backward
-        digitalWrite(stepPin, HIGH);
-        delayMicroseconds(100);
-        digitalWrite(stepPin, LOW);
-        delayMicroseconds(100);
-        noOfSteps++;
-        // Check if there's new command
-        if (Serial.available()) {
-          char newCommand = Serial.read();
-          if (newCommand == 'r' || newCommand == '0') {
-            Serial.print("Number of Steps = ");
-            Serial.println(noOfSteps);
-            noOfSteps = 0;
-            break;  // Exit the loop to change direction or stop
-          }
-        }
-      }
-    }
-    else if (command == 'p'){
+    if (command == 'u') {
+      moveMotorUp();
+      Serial.println("up");
+    } else if (command == 'd') {
+      moveMotorDown();
+      Serial.println("down");
+    } else if (command == 'p'){
+      stopMotor();
       printPot();
     }
-  } else {
-    printPot();
   }
 }

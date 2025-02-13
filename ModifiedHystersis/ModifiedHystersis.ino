@@ -24,7 +24,7 @@
 
 #define FLUID_DENSITY 997
 #define SET_POINT 2.5f
-#define HYSTERESIS 0.3f
+#define HYSTERESIS 0.5f
 #define RANGE 0.5f
 
 #define DEPTH_UPPER_LIMIT (SET_POINT - RANGE)
@@ -46,7 +46,7 @@ unsigned long long lastReadingTime = 0;
 unsigned long long lastTime;
 unsigned long long timer2;
 bool timerEnded = false;
-bool inRange = false;
+// bool inRange = false;
 bool sendingData = false;
 
 void IRAM_ATTR onTimer() {
@@ -167,7 +167,7 @@ void initLittleFS() {
 void updateDepth() {
   sensor.read();
   depth = sensor.depth() - initialDepth + 0.335;
-  file.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
+  // file.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
   file.flush(); // Ensure data is written
   Serial.printf("Timestamp: %s Depth: %f PotPosition: %d\n", getRTCTime().c_str(), depth, readPot());
   lastReadingTime = millis();
@@ -355,7 +355,7 @@ void loop() {
     } else {
       digitalWrite(ENABLE_PIN, HIGH);
       sendingData = true;
-      sendDepthData();
+      // sendDepthData();
     }
   }
 }

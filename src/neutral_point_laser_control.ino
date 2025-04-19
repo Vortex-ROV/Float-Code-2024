@@ -162,10 +162,14 @@ void loop() {
       q.pop();
       if (command == "calibration") {
         calibrating = true;
+        String msg = "Starting calibration";
+        espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
         Serial.println("Starting calibration");
       }
       else if (command == "mission") {
         mission = true;
+        String msg = "Starting mission";
+        espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
         Serial.println("Starting mission");
       }
     }
@@ -203,7 +207,10 @@ void loop() {
   else
     depth = 1.45f;
 
-  writeMsg(file, rtc.now(), depth);
+  String msg = writeMsg(file, rtc.now(), depth);
+  if (msg != "") {
+    espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
+  }
 
   done = isDone(depth);
   if (done) {
@@ -220,11 +227,15 @@ void loop() {
 
     file.close();
     file = LittleFS.open(FILE_NAME, FILE_READ, false);
+    String msg = "PROFILE_START";
+    espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
     while (file.available()) {
-      String msg = file.readStringUntil('\n');
+      msg = file.readStringUntil('\n');
       espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
       // Serial.println(depth);
     }
+    msg = "PROFILE_END";
+    espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
     file.close();
     file = LittleFS.open(FILE_NAME, FILE_WRITE, false);
 

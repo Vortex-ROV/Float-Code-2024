@@ -16,9 +16,9 @@ void resetFileWriteTime() {
     lastTime = 0;
 }
 
-void writeMsg(File &file, DateTime now, float depth) {
+String writeMsg(File &file, DateTime now, float depth) {
     if (millis() - lastTime < 5 * 1000)
-        return;
+        return "";
 
     lastTime = millis();
 
@@ -47,4 +47,6 @@ void writeMsg(File &file, DateTime now, float depth) {
 
     msg.concat('\n');
     file.write((const uint8_t*)msg.c_str(), msg.length());
+
+    return msg;
 }

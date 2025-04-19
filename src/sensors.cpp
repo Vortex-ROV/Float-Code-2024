@@ -19,7 +19,13 @@ void initBar30(MS5837& sensor) {
     sensor.setFluidDensity(FLUID_DENSITY); // kg/m^3 (freshwater, 1029 for seawater)
     sensor.read();
 
-    initialDepth = sensor.depth();
+    const int readingsCount = 10;
+    for (int i = 0; i < readingsCount; i++) {
+      initialDepth += sensor.depth();
+      delay(100);
+    }
+
+    initialDepth /= readingsCount;
 }
 
 void initVL6180X(VL6180X& sensor) {

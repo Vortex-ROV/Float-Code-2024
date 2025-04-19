@@ -6,4 +6,4 @@
 
 void initLittleFS();
 void resetFileWriteTime();
-void writeMsg(File &file, DateTime now, float depth);
+String writeMsg(File &file, DateTime now, float depth);

@@ -81,7 +81,7 @@ void setup() {
     moveMotorUp();
   }
   stopMotor();
-  delay(30 * 1000);
+  delay(10 * 1000);
 
   // send initial data to station
   float depth = updateDepth(bar30);
@@ -146,7 +146,7 @@ void setup() {
 
   ArduinoOTA.begin();
 
-  resetAccumulatedTime();
+  resetReadingsCount();
 }
 
 bool done = false;
@@ -177,8 +177,6 @@ void loop() {
     return;
   }
 
-  unsigned long currentMillis = millis();
-
   float depth = updateDepth(bar30);
 
   float requiredDistance;
@@ -202,26 +200,38 @@ void loop() {
   if (calibrating)
     return;
   
-  if (firstTrial)
-    depth = 1.0f;
-  else
-    depth = 1.45f;
+  // if (firstTrial)
+  //   depth = 1.0f;
+  // else
+  //   depth = 1.45f;
 
   String msg = writeMsg(file, rtc.now(), depth);
   if (msg != "") {
     espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
   }
 
-  done = isDone(depth);
+  done = isDone(depth, msg != "");
   if (done) {
     Serial.println("DONE!");
     while (readDistance(irSensor) < DISTANCE_UPPER_LIMIT) {
       ArduinoOTA.handle();
       moveMotorUp();
+      
+      String msg = writeMsg(file, rtc.now(), depth);
+      if (msg != "") {
+        espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
+      }
     }
     stopMotor();
 
-    delay(30 * 1000);
+    unsigned long time = millis();
+    while (millis() - time <= 30 * 1000) {
+      ArduinoOTA.handle();
+      String msg = writeMsg(file, rtc.now(), depth);
+      if (msg != "") {
+        espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
+      }
+    }
 
     Serial.println("starting sending");
 
@@ -241,7 +251,7 @@ void loop() {
 
     done = false;
     firstTrial = false;
-    resetAccumulatedTime();
+    resetReadingsCount();
     resetFileWriteTime();
   }
 }

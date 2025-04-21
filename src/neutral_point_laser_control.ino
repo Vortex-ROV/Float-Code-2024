@@ -237,15 +237,16 @@ void loop() {
 
     file.close();
     file = LittleFS.open(FILE_NAME, FILE_READ, false);
-    String msg = "PROFILE_START";
-    espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
+    String profileStart = "PROFILE_START\n";
+    espNowSend(espNowPeer, (uint8_t*)profileStart.c_str(), profileStart.length());
     while (file.available()) {
-      msg = file.readStringUntil('\n');
+      String msg = file.readStringUntil('\n');
       espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
       // Serial.println(depth);
     }
-    msg = "PROFILE_END";
-    espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
+
+    String profileEnd = "PROFILE_END\n";
+    espNowSend(espNowPeer, (uint8_t*)profileEnd.c_str(), profileEnd.length());
     file.close();
     file = LittleFS.open(FILE_NAME, FILE_WRITE, false);
 

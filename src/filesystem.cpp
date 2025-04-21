@@ -47,6 +47,7 @@ String writeMsg(File &file, DateTime now, float depth) {
 
     msg.concat('\n');
     file.write((const uint8_t*)msg.c_str(), msg.length());
-
+    
+    msg.remove(msg.length() - 1, 1);
     return msg;
 }

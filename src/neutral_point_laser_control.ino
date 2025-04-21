@@ -185,7 +185,7 @@ void loop() {
   else if (calibrating)
     requiredDistance = NEUTRAL_POINT;
 
-  Serial.printf("required distance: %f\n", requiredDistance);
+  // Serial.printf("required distance: %f\n", requiredDistance);
   if (readDistance(irSensor) > requiredDistance + 2) {
     // go down
     moveMotorDown();
@@ -206,11 +206,11 @@ void loop() {
   //   depth = 1.45f;
 
   String msg = writeMsg(file, rtc.now(), depth);
-  if (msg != "") {
+  done = isDone(depth, msg.length());
+  if (msg.length()) {
     espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
   }
 
-  done = isDone(depth, msg != "");
   if (done) {
     Serial.println("DONE!");
     while (readDistance(irSensor) < DISTANCE_UPPER_LIMIT) {

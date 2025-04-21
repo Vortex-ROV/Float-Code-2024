@@ -39,9 +39,9 @@ void initVL6180X(VL6180X& sensor) {
 int readDistance(VL6180X& irSensor) {
     static float laser = irSensor.readRangeSingleMillimeters();
     laser = irSensor.readRangeSingleMillimeters() * 0.01f + laser * 0.99f;
-    Serial.print("Distance: ");
-    Serial.print(laser);
-    Serial.println(" mm");
+    // Serial.print("Distance: ");
+    // Serial.print(laser);
+    // Serial.println(" mm");
     return laser;
 }
 
@@ -51,7 +51,7 @@ float updateDepth(MS5837& bar30) {
       return lastDepth;
       
     bar30.read();
-    Serial.printf("bar30: %f\n", bar30.depth());
+    // Serial.printf("bar30: %f\n", bar30.depth());
     // float depth = bar30.depth() - initialDepth + 0.335;
     float depth = bar30.depth() - initialDepth;
     

@@ -10,10 +10,16 @@ float getRequiredDistance(float depth) {
     float requiredDistance;
     float minDepth = 0.0f;
 
-    if (depth > REQUIRED_DEPTH)
-        return (depth - REQUIRED_DEPTH) / (MAX_DEPTH - REQUIRED_DEPTH) * (DISTANCE_UPPER_LIMIT - NEUTRAL_POINT) + NEUTRAL_POINT;
-
-    return depth / (REQUIRED_DEPTH - minDepth) * (NEUTRAL_POINT - DISTANCE_LOWER_LIMIT) + DISTANCE_LOWER_LIMIT;
+    if (depth > REQUIRED_DEPTH) {
+        requiredDistance = (depth - REQUIRED_DEPTH) / (MAX_DEPTH - REQUIRED_DEPTH) * (DISTANCE_UPPER_LIMIT - NEUTRAL_POINT) + NEUTRAL_POINT;
+        requiredDistance = min(requiredDistance, (float)DISTANCE_UPPER_LIMIT);
+        requiredDistance = max(requiredDistance, (float)DISTANCE_LOWER_LIMIT);
+        return requiredDistance;
+    }
+    requiredDistance = depth / (REQUIRED_DEPTH - minDepth) * (NEUTRAL_POINT - DISTANCE_LOWER_LIMIT) + DISTANCE_LOWER_LIMIT;
+    requiredDistance = min(requiredDistance, (float)DISTANCE_UPPER_LIMIT);
+    requiredDistance = max(requiredDistance, (float)DISTANCE_LOWER_LIMIT);
+    return requiredDistance;
 }
 
 bool isDone(float depth, bool written) {
@@ -22,7 +28,9 @@ bool isDone(float depth, bool written) {
         totalReadingsInRange++;
     }
 
-    lastReadingWrittenInRange = readingInRange && written;
+    if (written)
+        lastReadingWrittenInRange = readingInRange;
+
     return totalReadingsInRange >= PROFILE_READINGS;
 }
 

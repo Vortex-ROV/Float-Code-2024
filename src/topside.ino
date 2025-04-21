@@ -71,6 +71,15 @@ void setup() {
 }
 
 void loop() {
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    Serial.printf("Command: %s\n", command);
+    espNowSend(peer, (uint8_t*)command.c_str(), command.length());
+
+    while (q.size())
+      q.pop();
+  }
+
   while (q.size()) {
     String msg = q.front();
     Serial.println(msg);

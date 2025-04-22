@@ -22,7 +22,7 @@ String writeMsg(File &file, DateTime now, float depth) {
 
     lastTime = millis();
 
-    String msg = "EX01 ";
+    String msg = "EX06 ";
 
     uint8_t hour = now.hour();
     if (hour < 10)

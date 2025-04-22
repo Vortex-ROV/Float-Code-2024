@@ -87,7 +87,7 @@ void setup() {
   float depth = updateDepth(bar30);
   DateTime now = rtc.now();
 
-  String msg = "EX01 ";
+  String msg = "EX06 ";
   uint8_t hour = now.hour();
   if (hour < 10)
     msg.concat('0');

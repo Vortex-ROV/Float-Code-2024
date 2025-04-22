@@ -18,7 +18,7 @@ void loop() {
   int seconds = elapsedTime % 60;
 
   // Print everything using ONE Serial.println
-  String msg = "EX01 ";
+  String msg = "EX06 ";
   msg.concat(hours < 10 ? "0" : "");
   msg.concat(hours);
   msg.concat(":");

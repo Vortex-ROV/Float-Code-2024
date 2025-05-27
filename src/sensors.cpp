@@ -38,10 +38,11 @@ void initVL6180X(VL6180X& sensor) {
 
 int readDistance(VL6180X& irSensor) {
     static float laser = irSensor.readRangeSingleMillimeters();
-    laser = irSensor.readRangeSingleMillimeters() * 0.01f + laser * 0.99f;
-    // Serial.print("Distance: ");
-    // Serial.print(laser);
-    // Serial.println(" mm");
+    float r = 0.99f;
+    laser = irSensor.readRangeSingleMillimeters() * (1 - r) + laser * r;
+    Serial.print("Distance: ");
+    Serial.print(laser);
+    Serial.println(" mm");
     return laser;
 }
 

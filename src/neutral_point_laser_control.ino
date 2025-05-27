@@ -76,6 +76,9 @@ void setup() {
 
   irSensor.setTimeout(100);
 
+  Serial.println("MAC Address:");
+  Serial.println(WiFi.macAddress());
+
   // go up
   while (readDistance(irSensor) < DISTANCE_UPPER_LIMIT) {
     moveMotorUp();
@@ -87,7 +90,7 @@ void setup() {
   float depth = updateDepth(bar30);
   DateTime now = rtc.now();
 
-  String msg = "EX06 ";
+  String msg = "EXP06 ";
   uint8_t hour = now.hour();
   if (hour < 10)
     msg.concat('0');
@@ -186,10 +189,10 @@ void loop() {
     requiredDistance = NEUTRAL_POINT;
 
   // Serial.printf("required distance: %f\n", requiredDistance);
-  if (readDistance(irSensor) > requiredDistance + 2) {
+  if (readDistance(irSensor) > requiredDistance + 1) {
     // go down
     moveMotorDown();
-  } else if (readDistance(irSensor) < requiredDistance - 2) {
+  } else if (readDistance(irSensor) < requiredDistance - 1) {
     // go up
     moveMotorUp();
   } else {
@@ -217,6 +220,7 @@ void loop() {
       ArduinoOTA.handle();
       moveMotorUp();
       
+      float depth = updateDepth(bar30);
       String msg = writeMsg(file, rtc.now(), depth);
       if (msg != "") {
         espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());
@@ -225,8 +229,10 @@ void loop() {
     stopMotor();
 
     unsigned long time = millis();
-    while (millis() - time <= 30 * 1000) {
+    while (millis() - time <= 60 * 1000) {
       ArduinoOTA.handle();
+      
+      float depth = updateDepth(bar30);
       String msg = writeMsg(file, rtc.now(), depth);
       if (msg != "") {
         espNowSend(espNowPeer, (uint8_t*)msg.c_str(), msg.length());

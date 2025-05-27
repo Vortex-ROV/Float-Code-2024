@@ -53,8 +53,9 @@ void setup() {
   esp_now_register_recv_cb(onReceive);
 
   // set mac address of the peer
-  // cc:7b:5c:a7:7f:cc
-  uint8_t peerAddress[] = { 0xcc, 0x7b, 0x5c, 0xa7, 0x7f, 0xcc  };
+  // explorers: cc:7b:5c:a7:7f:cc
+  // pioneers: C0:49:EF:F9:9A:48
+  uint8_t peerAddress[] = { 0xcc, 0x7b, 0x5c, 0xa7, 0x7f, 0xcc };
   for (int i = 0; i < 6; i++) {
     peer.peer_addr[i] = peerAddress[i];
   }

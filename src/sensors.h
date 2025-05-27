@@ -3,7 +3,7 @@
 #include "MS5837.h"
 #include "VL6180X.h"
 
-#define DISTANCE_LOWER_LIMIT 80
+#define DISTANCE_LOWER_LIMIT 70
 #define DISTANCE_UPPER_LIMIT 105
 
 void initBar30(MS5837& sensor);

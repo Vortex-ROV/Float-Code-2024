@@ -23,7 +23,8 @@ float getRequiredDistance(float depth) {
 }
 
 bool isDone(float depth, bool written) {
-    bool readingInRange = depth >= REQUIRED_DEPTH - MARGIN && depth <= REQUIRED_DEPTH + MARGIN;
+    bool readingInRange = (depth + 0.7) >= 2.0f && (depth + 0.7) <= 3.0f;
+    // bool readingInRange = depth >= REQUIRED_DEPTH - MARGIN && depth <= REQUIRED_DEPTH + MARGIN;
     if (lastReadingWrittenInRange && readingInRange && written) {
         totalReadingsInRange++;
     }
